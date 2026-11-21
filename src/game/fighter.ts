@@ -48,6 +48,13 @@ import type {
 
 const KNOCKBACK_FRICTION = 720;
 const BLOCKSTUN_SECONDS = 0.14;
+const GUARD_MAX = 100;
+const GUARD_REGEN_PER_SEC = 26;
+const GUARD_BREAK_STUN_SECONDS = 0.85;
+const PARRY_WINDOW_SECONDS = 0.22;
+const PARRY_LOCKOUT_SECONDS = 0.34;
+
+export type BlockOutcome = 'hit' | 'block' | 'parry' | 'guardBreak';
 
 const METER_MAX = 100;
 const METER_START = 25;
@@ -141,6 +148,7 @@ export interface FighterOptions {
   onSpecialStart?: (fighter: Fighter) => void;
   onSecretStart?: (fighter: Fighter, spec: SecretMoveSpec) => void;
   onComboChange?: (fighter: Fighter, comboHits: number) => void;
+  onGuardEvent?: (fighter: Fighter, kind: 'parry' | 'guardBreak') => void;
 }
 
 export class Fighter {
@@ -184,8 +192,14 @@ export class Fighter {
   private readonly onSpecialStart?: (fighter: Fighter) => void;
   private readonly onSecretStart?: (fighter: Fighter, spec: SecretMoveSpec) => void;
   private readonly onComboChange?: (fighter: Fighter, comboHits: number) => void;
+  private readonly onGuardEvent?: (fighter: Fighter, kind: 'parry' | 'guardBreak') => void;
 
-  // Auto-combo, hidden secret combo window & special movement state
+  // Skill-guard, auto-combo, hidden secret combo window & special movement state
+  private guardMeter = GUARD_MAX;
+  private guardBrokenTimer = 0;
+  private blockHoldTimer = 0;
+  private wasHoldingBlock = false;
+  private parryLockoutTimer = 0;
   private queuedComboHeavy = false;
   private comboHits = 0;
   private comboTimer = 0;
@@ -203,6 +217,7 @@ export class Fighter {
     this.onSpecialStart = options.onSpecialStart;
     this.onSecretStart = options.onSecretStart;
     this.onComboChange = options.onComboChange;
+    this.onGuardEvent = options.onGuardEvent;
     this.character = getCharacterDefinition(options.characterId);
     this.specialSpec = getSpecialMoveSpec(this.character.id);
     this.secretSpec = getSecretMoveSpec(this.character.id);
@@ -244,6 +259,10 @@ export class Fighter {
 
   get meter01(): number {
     return METER_MAX > 0 ? Phaser.Math.Clamp(this.meter / METER_MAX, 0, 1) : 0;
+  }
+
+  get guard01(): number {
+    return GUARD_MAX > 0 ? Phaser.Math.Clamp(this.guardMeter / GUARD_MAX, 0, 1) : 0;
   }
 
   get cooldownRemainingSeconds(): number {
@@ -448,9 +467,17 @@ export class Fighter {
     }
   }
 
-  flashHit(blocked: boolean): void {
-    this.sprite.setTint(blocked ? 0x93c5fd : 0xff7a7a);
-    this.scene.time.delayedCall(100, () => this.sprite?.clearTint());
+  flashHit(blocked: boolean, outcome?: BlockOutcome): void {
+    const tint =
+      outcome === 'parry'
+        ? 0xfacc15
+        : outcome === 'guardBreak'
+          ? 0xf97316
+          : blocked
+            ? 0x93c5fd
+            : 0xff7a7a;
+    this.sprite.setTint(tint);
+    this.scene.time.delayedCall(outcome === 'parry' ? 140 : 100, () => this.sprite?.clearTint());
   }
 
   getHurtRect(): Phaser.Geom.Rectangle | null {
@@ -466,7 +493,7 @@ export class Fighter {
   }
 
   getGuardRect(): Phaser.Geom.Rectangle | null {
-    if (this.defeated) {
+    if (this.defeated || this.guardBrokenTimer > 0 || this.guardMeter <= 0) {
       return null;
     }
 
@@ -480,22 +507,84 @@ export class Fighter {
     return frame?.guard ? this.frameRectToWorld(animation, frame.guard) : null;
   }
 
-  applyHit(profile: AttackProfile, attackerFacing: 1 | -1, blocked: boolean): void {
+  applyHit(profile: AttackProfile, attackerFacing: 1 | -1, blocked: boolean): BlockOutcome {
     if (this.defeated) {
-      return;
+      return 'hit';
     }
 
     const settings = this.app.settingsStore.getState();
 
     if (blocked) {
-      this.knockbackVel = attackerFacing * profile.knockback * 0.35;
+      const isParry =
+        this.blockHoldTimer <= PARRY_WINDOW_SECONDS &&
+        this.parryLockoutTimer <= 0 &&
+        this.guardBrokenTimer <= 0;
+
+      if (isParry) {
+        const parryChip = profile.kind === 'special' ? Math.max(1, Math.round(profile.damage * 0.06)) : 0;
+        this.health = Math.max(0, this.health - parryChip);
+        this.guardMeter = Math.min(GUARD_MAX, this.guardMeter + 18);
+        this.gainMeter(16);
+        this.knockbackVel = attackerFacing * profile.knockback * 0.12;
+        this.locked = false;
+        this.dashTimer = 0;
+
+        if (this.health <= 0) {
+          this.defeated = true;
+          this.locked = true;
+          this.stunIsBlock = false;
+          this.hitstunTimer = 0;
+          this.playState(this.actionKeys.knockdown, false);
+          playCombatSfx('ko', settings);
+          return 'hit';
+        }
+
+        this.hitstunTimer = 0.06;
+        this.stunIsBlock = true;
+        this.stunBlockLow = this.currentAnimKey === this.actionKeys.blockLow;
+        playCombatSfx('parry', settings);
+        this.onGuardEvent?.(this, 'parry');
+        return 'parry';
+      }
+
+      // Passive hold block drains guard stamina and leaks significant chip damage
+      const guardDrain = profile.kind === 'special' ? 32 : profile.kind === 'low' ? 24 : 16;
+      this.guardMeter = Math.max(0, this.guardMeter - guardDrain);
+      const chipRatio = profile.kind === 'high' ? 0.36 : 0.45;
+      const chipDamage = Math.max(2, Math.round(profile.damage * chipRatio));
+      this.health = Math.max(0, this.health - chipDamage);
+      this.locked = false;
+      this.dashTimer = 0;
+
+      if (this.health <= 0) {
+        this.defeated = true;
+        this.locked = true;
+        this.stunIsBlock = false;
+        this.hitstunTimer = 0;
+        this.playState(this.actionKeys.knockdown, false);
+        playCombatSfx('ko', settings);
+        return 'hit';
+      }
+
+      if (this.guardMeter <= 0) {
+        this.guardBrokenTimer = GUARD_BREAK_STUN_SECONDS;
+        this.guardMeter = 35;
+        this.stunIsBlock = false;
+        this.hitstunTimer = GUARD_BREAK_STUN_SECONDS;
+        this.knockbackVel = attackerFacing * Math.max(220, profile.knockback * 0.85);
+        this.currentAnimKey = '';
+        this.playState(this.actionKeys.hitHigh, false);
+        playCombatSfx('guardBreak', settings);
+        this.onGuardEvent?.(this, 'guardBreak');
+        return 'guardBreak';
+      }
+
+      this.knockbackVel = attackerFacing * profile.knockback * 0.42;
       this.hitstunTimer = Math.max(this.hitstunTimer, BLOCKSTUN_SECONDS);
       this.stunIsBlock = true;
       this.stunBlockLow = this.currentAnimKey === this.actionKeys.blockLow;
-      this.locked = false;
-      this.dashTimer = 0;
       playCombatSfx('block', settings);
-      return;
+      return 'block';
     }
 
     this.health = Math.max(0, this.health - profile.damage);
@@ -513,7 +602,7 @@ export class Fighter {
       this.hitstunTimer = 0;
       this.playState(this.actionKeys.knockdown, false);
       playCombatSfx('ko', settings);
-      return;
+      return 'hit';
     }
 
     playCombatSfx(profile.kind === 'high' ? 'light' : 'heavy', settings);
@@ -522,6 +611,7 @@ export class Fighter {
     this.hitstunTimer = profile.hitstun / 1000;
     this.currentAnimKey = '';
     this.playState(this.actionKeys.hitHigh, false);
+    return 'hit';
   }
 
   resetForRound(x: number, facing: 1 | -1): void {
@@ -530,6 +620,11 @@ export class Fighter {
     this.facing = facing;
     this.maxHealth = this.combat().maxHealth;
     this.health = this.maxHealth;
+    this.guardMeter = GUARD_MAX;
+    this.guardBrokenTimer = 0;
+    this.blockHoldTimer = 0;
+    this.wasHoldingBlock = false;
+    this.parryLockoutTimer = 0;
     this.velocityY = 0;
     this.grounded = true;
     this.locked = false;
@@ -590,6 +685,32 @@ export class Fighter {
 
     if (this.specialCooldownTimer > 0) {
       this.specialCooldownTimer = Math.max(0, this.specialCooldownTimer - seconds);
+    }
+    if (this.guardBrokenTimer > 0) {
+      this.guardBrokenTimer = Math.max(0, this.guardBrokenTimer - seconds);
+    }
+    if (this.parryLockoutTimer > 0) {
+      this.parryLockoutTimer = Math.max(0, this.parryLockoutTimer - seconds);
+    }
+
+    const blockingNow =
+      !this.locked && this.grounded && this.hitstunTimer <= 0 && input.block && this.guardBrokenTimer <= 0;
+    if (blockingNow) {
+      if (!this.wasHoldingBlock) {
+        this.blockHoldTimer = 0;
+      } else {
+        this.blockHoldTimer += seconds;
+      }
+      this.wasHoldingBlock = true;
+    } else {
+      if (this.wasHoldingBlock) {
+        this.parryLockoutTimer = PARRY_LOCKOUT_SECONDS;
+      }
+      this.wasHoldingBlock = false;
+      this.blockHoldTimer = 0;
+      if (this.guardBrokenTimer <= 0) {
+        this.guardMeter = Math.min(GUARD_MAX, this.guardMeter + GUARD_REGEN_PER_SEC * seconds);
+      }
     }
 
     // Passive meter trickle during live fighting
@@ -816,7 +937,7 @@ export class Fighter {
       this.startOneShot(this.actionKeys.heavy);
       return;
     }
-    if (input.block) {
+    if (input.block && this.guardBrokenTimer <= 0) {
       this.playState(input.crouch ? this.actionKeys.blockLow : this.actionKeys.blockHigh, false);
       return;
     }
@@ -1428,7 +1549,7 @@ export class Fighter {
       this.sprite.x = this.posX;
       this.updateShadow();
 
-      // Keep attached special zone aligned with sonic blitz or cyclone
+      // Keep attached special zone aligned with ricochet blitz or cyclone
       if (this.specialSpec.archetype === 'ricochet-blitz' && this.specialZones.length > 0) {
         const active = this.specialZones[this.specialZones.length - 1];
         active.x = this.posX;
@@ -1456,14 +1577,30 @@ export class Fighter {
       zone.visual?.setPosition(zone.x, zone.y);
 
       if (zone.life <= 0) {
-        zone.visual?.destroy();
+        if (zone.visual) {
+          const visual = zone.visual;
+          this.scene.tweens.killTweensOf(visual);
+          this.scene.tweens.add({
+            targets: visual,
+            alpha: 0,
+            scale: 1.28,
+            duration: 170,
+            ease: 'Cubic.Out',
+            onComplete: () => visual.destroy()
+          });
+        }
         this.specialZones.splice(i, 1);
       }
     }
   }
 
   private clearSpecialZones(): void {
-    this.specialZones.forEach((zone) => zone.visual?.destroy());
+    this.specialZones.forEach((zone) => {
+      if (zone.visual) {
+        this.scene.tweens.killTweensOf(zone.visual);
+        zone.visual.destroy();
+      }
+    });
     this.specialZones = [];
   }
 

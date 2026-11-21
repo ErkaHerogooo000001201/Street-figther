@@ -385,7 +385,7 @@ function removeBackground(data: Uint8ClampedArray, width: number, height: number
     }
   }
 
-  // Despill any remaining bright green reflection pixels inside limbs/clothes and wipe tiny stray floating specks
+  // Despill green/magenta reflections inside limbs/clothes gently without deleting interior pixels
   if (greenScreen || magentaScreen) {
     for (let idx = 0; idx < total; idx += 1) {
       if (bgMask[idx]) continue;
@@ -395,12 +395,9 @@ function removeBackground(data: Uint8ClampedArray, width: number, height: number
       const g = data[offset + 1];
       const b = data[offset + 2];
 
-      if (greenScreen && g > 140 && g - Math.max(r, b) > 55) {
-        data[offset + 3] = 0;
-        bgMask[idx] = 1;
-      } else if (greenScreen && g > Math.max(r, b) + 12) {
+      if (greenScreen && g > Math.max(r, b) + 14) {
         const cap = Math.max(r, b);
-        data[offset + 1] = Math.round(cap + (g - cap) * 0.1);
+        data[offset + 1] = Math.round(cap + (g - cap) * 0.14);
       } else if (magentaScreen && r > g + 18 && b > g + 18) {
         data[offset] = Math.round(g + (r - g) * 0.25);
         data[offset + 2] = Math.round(g + (b - g) * 0.25);
@@ -408,7 +405,7 @@ function removeBackground(data: Uint8ClampedArray, width: number, height: number
     }
   }
 
-  // Erase tiny detached specks (< 16px) so zero floating leaf-like artifacts remain
+  // Erase only tiny detached noise specks (< 5px) while preserving detached fingers/sparks/details
   const speckSeen = new Uint8Array(total);
   const speckQueue: number[] = [];
   for (let idx = 0; idx < total; idx += 1) {
@@ -434,7 +431,7 @@ function removeBackground(data: Uint8ClampedArray, width: number, height: number
         }
       }
     }
-    if (speckQueue.length < 16) {
+    if (speckQueue.length < 5) {
       for (const p of speckQueue) {
         data[p * 4 + 3] = 0;
       }

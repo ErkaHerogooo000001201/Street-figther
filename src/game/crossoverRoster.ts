@@ -11,8 +11,7 @@ export type CrossoverHeadgear =
   | 'karate-band'
   | 'scorpion-hood'
   | 'spartan'
-  | 'hero-cap'
-  | 'sonic-quills';
+  | 'hero-cap';
 
 export type CrossoverWeapon = 'none' | 'katana' | 'sword-shield' | 'chaos-blades' | 'kunai';
 
@@ -40,40 +39,6 @@ export interface CrossoverVisualProfile {
   scarMark?: 'cheek-whiskers' | 'chest-x' | 'forehead-scar' | 'omega-tattoo';
   gloveColor: string;
   bootColor: string;
-}
-
-function mkVariant(
-  id: string,
-  label: string,
-  universe: 'Anime' | 'Game' | 'Original',
-  origin: string,
-  baseSheetId: string,
-  hueShiftDeg: number,
-  outfitPrimary: string,
-  auraColor: string,
-  weapon: CrossoverWeapon = 'none'
-): CrossoverVisualProfile {
-  return {
-    id,
-    label,
-    universe,
-    origin,
-    baseSheetId,
-    hueShiftDeg,
-    skin: '#f4c7a1',
-    skinShade: '#d99f77',
-    outfitPrimary,
-    outfitSecondary: '#1e293b',
-    beltOrTrim: auraColor,
-    hairColor: '#0f172a',
-    eyeColor: auraColor,
-    auraColor,
-    auraGlow: '#ffffff',
-    headgear: 'spiky-gold',
-    weapon,
-    gloveColor: outfitPrimary,
-    bootColor: '#0f172a'
-  };
 }
 
 export const CROSSOVER_PROFILES: CrossoverVisualProfile[] = [
@@ -596,25 +561,6 @@ export const CROSSOVER_PROFILES: CrossoverVisualProfile[] = [
     bootColor: '#0284c7'
   },
   {
-    id: 'sonic',
-    label: 'Sonic',
-    universe: 'Game',
-    origin: 'Sonic',
-    skin: '#f3cba4',
-    skinShade: '#d6a276',
-    outfitPrimary: '#2563eb',
-    outfitSecondary: '#1d4ed8',
-    beltOrTrim: '#facc15',
-    hairColor: '#2563eb',
-    eyeColor: '#22c55e',
-    auraColor: '#facc15',
-    auraGlow: '#38bdf8',
-    headgear: 'sonic-quills',
-    weapon: 'none',
-    gloveColor: '#f8fafc',
-    bootColor: '#dc2626'
-  },
-  {
     id: 'erkhembayar',
     label: 'Erkhembayar',
     universe: 'Original',
@@ -632,95 +578,7 @@ export const CROSSOVER_PROFILES: CrossoverVisualProfile[] = [
     weapon: 'none',
     gloveColor: '#f2c7a4',
     bootColor: '#2563eb'
-  },
-  // === EXPANDED ANIME UNIVERSE (reaching 100 total fighters) ===
-  mkVariant('gohan', 'Beast Gohan', 'Anime', 'Dragon Ball', 'goku', 210, '#7e22ce', '#e2e8f0'),
-  mkVariant('trunks', 'Future Trunks', 'Anime', 'Dragon Ball', 'cloud', 245, '#3b82f6', '#c084fc', 'katana'),
-  mkVariant('piccolo', 'Orange Piccolo', 'Anime', 'Dragon Ball', 'vegeta', 110, '#f97316', '#facc15'),
-  mkVariant('broly', 'Legendary Broly', 'Anime', 'Dragon Ball', 'kaido', 95, '#22c55e', '#4ade80'),
-  mkVariant('cell', 'Perfect Cell', 'Anime', 'Dragon Ball', 'frieza', 105, '#16a34a', '#a855f7'),
-
-  mkVariant('kakashi', 'Kakashi', 'Anime', 'Naruto', 'sasuke', 180, '#334155', '#38bdf8', 'kunai'),
-  mkVariant('itachi', 'Itachi', 'Anime', 'Naruto', 'madara', -25, '#dc2626', '#ef4444', 'katana'),
-  mkVariant('obito', 'Obito', 'Anime', 'Naruto', 'madara', 35, '#f97316', '#a855f7'),
-  mkVariant('minato', 'Minato', 'Anime', 'Naruto', 'naruto', 48, '#facc15', '#38bdf8', 'kunai'),
-
-  mkVariant('sanji', 'Sanji', 'Anime', 'One Piece', 'garou', 36, '#f97316', '#facc15'),
-  mkVariant('shanks', 'Shanks', 'Anime', 'One Piece', 'dante', 350, '#991b1b', '#ef4444', 'katana'),
-  mkVariant('ace', 'Portgas D. Ace', 'Anime', 'One Piece', 'luffy', 22, '#f97316', '#fb923c'),
-  mkVariant('law', 'Trafalgar Law', 'Anime', 'One Piece', 'toji', 62, '#facc15', '#38bdf8', 'katana'),
-
-  mkVariant('yuji', 'Yuji Itadori', 'Anime', 'Jujutsu Kaisen', 'akaza', 330, '#ef4444', '#38bdf8'),
-  mkVariant('megumi', 'Megumi', 'Anime', 'Jujutsu Kaisen', 'sasuke', 215, '#1e293b', '#6366f1'),
-  mkVariant('yuta', 'Yuta Okkotsu', 'Anime', 'Jujutsu Kaisen', 'tanjiro', 195, '#f8fafc', '#a855f7', 'katana'),
-  mkVariant('geto', 'Suguru Geto', 'Anime', 'Jujutsu Kaisen', 'madara', 255, '#7c3aed', '#c084fc'),
-
-  mkVariant('zenitsu', 'Zenitsu', 'Anime', 'Demon Slayer', 'tanjiro', 55, '#facc15', '#fde047', 'katana'),
-  mkVariant('inosuke', 'Inosuke', 'Anime', 'Demon Slayer', 'zoro', 195, '#3b82f6', '#38bdf8', 'katana'),
-  mkVariant('rengoku', 'Rengoku', 'Anime', 'Demon Slayer', 'cloud', 28, '#f97316', '#ef4444', 'katana'),
-  mkVariant('kokushibo', 'Kokushibo', 'Anime', 'Demon Slayer', 'zoro', 290, '#9333ea', '#f43f5e', 'katana'),
-
-  mkVariant('genos', 'Genos', 'Anime', 'One Punch Man', 'vegeta', 200, '#f59e0b', '#fb923c'),
-  mkVariant('bang', 'Silver Fang', 'Anime', 'One Punch Man', 'ryu', 205, '#0ea5e9', '#e2e8f0'),
-  mkVariant('tatsumaki', 'Tatsumaki', 'Anime', 'One Punch Man', 'gojo', 135, '#10b981', '#34d399'),
-
-  mkVariant('ichigo', 'Ichigo', 'Anime', 'Bleach', 'cloud', 20, '#f97316', '#111827', 'katana'),
-  mkVariant('aizen', 'Sosuke Aizen', 'Anime', 'Bleach', 'muzan', 240, '#f8fafc', '#a855f7', 'katana'),
-  mkVariant('byakuya', 'Byakuya', 'Anime', 'Bleach', 'madara', 310, '#f472b6', '#fbcfe8', 'katana'),
-  mkVariant('kenpachi', 'Kenpachi', 'Anime', 'Bleach', 'kaido', 45, '#facc15', '#fbbf24', 'katana'),
-
-  mkVariant('eren', 'Eren Titan', 'Anime', 'Attack on Titan', 'kaido', 145, '#15803d', '#ef4444'),
-  mkVariant('levi', 'Captain Levi', 'Anime', 'Attack on Titan', 'toji', 130, '#16a34a', '#38bdf8', 'chaos-blades'),
-  mkVariant('mikasa', 'Mikasa', 'Anime', 'Attack on Titan', 'toji', 345, '#dc2626', '#94a3b8', 'chaos-blades'),
-
-  mkVariant('denji', 'Chainsaw Man', 'Anime', 'Chainsaw Man', 'akaza', 18, '#dc2626', '#f97316', 'chaos-blades'),
-  mkVariant('aki', 'Aki Hayakawa', 'Anime', 'Chainsaw Man', 'sasuke', 210, '#0284c7', '#38bdf8', 'katana'),
-  mkVariant('makima', 'Makima', 'Anime', 'Chainsaw Man', 'muzan', 350, '#be123c', '#f43f5e'),
-
-  mkVariant('deku', 'Deku', 'Anime', 'My Hero Academia', 'luffy', 140, '#16a34a', '#22d3ee'),
-  mkVariant('bakugo', 'Bakugo', 'Anime', 'My Hero Academia', 'vegeta', 25, '#f97316', '#fde047'),
-  mkVariant('todoroki', 'Todoroki', 'Anime', 'My Hero Academia', 'subzero', 15, '#ef4444', '#38bdf8'),
-  mkVariant('allmight', 'All Might', 'Anime', 'My Hero Academia', 'saitama', 215, '#2563eb', '#facc15'),
-
-  mkVariant('jinwoo', 'Sung Jinwoo', 'Anime', 'Solo Leveling', 'toji', 260, '#7c3aed', '#a855f7', 'kunai'),
-  mkVariant('igris', 'Blood-Red Igris', 'Anime', 'Solo Leveling', 'dante', 345, '#b91c1c', '#ef4444', 'katana'),
-
-  mkVariant('gon', 'Gon Freecss', 'Anime', 'Hunter x Hunter', 'naruto', 115, '#16a34a', '#facc15'),
-  mkVariant('killua', 'Killua', 'Anime', 'Hunter x Hunter', 'garou', 195, '#38bdf8', '#e0f2fe'),
-  mkVariant('hisoka', 'Hisoka', 'Anime', 'Hunter x Hunter', 'gojo', 305, '#ec4899', '#c084fc'),
-
-  mkVariant('jotaro', 'Jotaro Kujo', 'Anime', 'JoJo', 'saitama', 255, '#4338ca', '#c084fc'),
-  mkVariant('dio', 'DIO', 'Anime', 'JoJo', 'boros', 52, '#facc15', '#fde047'),
-
-  // === EXPANDED GAME & ORIGINAL ROSTER ===
-  mkVariant('ken', 'Ken Masters', 'Game', 'Street Fighter', 'ryu', 0, '#ef4444', '#f97316'),
-  mkVariant('akuma', 'Akuma', 'Game', 'Street Fighter', 'akaza', 280, '#9333ea', '#dc2626'),
-  mkVariant('cammy', 'Cammy', 'Game', 'Street Fighter', 'chunli', 125, '#16a34a', '#facc15'),
-
-  mkVariant('raiden', 'Lord Raiden', 'Game', 'Mortal Kombat', 'gojo', 195, '#38bdf8', '#e0f2fe'),
-  mkVariant('liukang', 'Liu Kang', 'Game', 'Mortal Kombat', 'ryu', 15, '#dc2626', '#f97316'),
-
-  mkVariant('jin', 'Jin Kazama', 'Game', 'Tekken', 'erkhembayar', 340, '#dc2626', '#f43f5e'),
-  mkVariant('kazuya', 'Kazuya Mishima', 'Game', 'Tekken', 'vegeta', 270, '#9333ea', '#c084fc'),
-  mkVariant('heihachi', 'Heihachi', 'Game', 'Tekken', 'akaza', 225, '#38bdf8', '#facc15'),
-
-  mkVariant('shadow', 'Shadow', 'Game', 'Sonic', 'sonic', 340, '#dc2626', '#f97316'),
-  mkVariant('knuckles', 'Knuckles', 'Game', 'Sonic', 'sonic', 12, '#ef4444', '#facc15'),
-
-  mkVariant('vergil', 'Vergil', 'Game', 'Devil May Cry', 'dante', 210, '#2563eb', '#38bdf8', 'katana'),
-  mkVariant('sephiroth', 'Sephiroth', 'Game', 'Final Fantasy VII', 'dante', 255, '#475569', '#c084fc', 'katana'),
-  mkVariant('ganondorf', 'Ganondorf', 'Game', 'Zelda', 'kaido', 290, '#b91c1c', '#f97316', 'katana'),
-  mkVariant('zero', 'Zero', 'Game', 'Mega Man X', 'megaman', 345, '#dc2626', '#22c55e', 'katana'),
-  mkVariant('samus', 'Samus Aran', 'Game', 'Metroid', 'megaman', 28, '#f97316', '#38bdf8'),
-
-  mkVariant('doomslayer', 'Doom Slayer', 'Game', 'DOOM', 'kratos', 115, '#15803d', '#f97316', 'chaos-blades'),
-  mkVariant('masterchief', 'Master Chief', 'Game', 'Halo', 'megaman', 120, '#166534', '#38bdf8'),
-  mkVariant('geralt', 'Geralt of Rivia', 'Game', 'The Witcher', 'cloud', 190, '#64748b', '#ef4444', 'katana'),
-
-  mkVariant('temuujin', 'Temuujin Khan', 'Original', 'Vibe Fighter', 'erkhembayar', 45, '#d97706', '#facc15'),
-  mkVariant('bataar', 'Bataar', 'Original', 'Vibe Fighter', 'kaido', 200, '#0284c7', '#38bdf8'),
-  mkVariant('nomad', 'Steppe Nomad', 'Original', 'Vibe Fighter', 'scorpion', 180, '#38bdf8', '#facc15', 'kunai'),
-  mkVariant('valkyrie', 'Valkyrie', 'Original', 'Vibe Fighter', 'chunli', 285, '#c084fc', '#f472b6')
+  }
 ];
 
 function buildCrossoverActions(profile: CrossoverVisualProfile): FighterActionSpec[] {

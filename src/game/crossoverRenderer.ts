@@ -567,7 +567,7 @@ function extractCellPose(
   top: number,
   bottom: number
 ): ExtractedPose | null {
-  // Find vertical foreground bands so any stray caption lines below the feet are ignored
+  // Collect vertical foreground bands; only filter detached bottom caption strips so weapons/auras/limbs stay intact
   const rowCounts: number[] = [];
   for (let y = top; y < bottom; y += 1) {
     let c = 0;
@@ -577,46 +577,66 @@ function extractCellPose(
     rowCounts.push(c);
   }
 
-  let bestBandTop = top;
-  let bestBandBottom = top;
+  interface VBand {
+    top: number;
+    bottom: number;
+    height: number;
+  }
+  const bands: VBand[] = [];
   let bandStart = -1;
   let gapRun = 0;
 
   for (let i = 0; i <= rowCounts.length; i += 1) {
-    const filled = i < rowCounts.length && rowCounts[i] >= 3;
+    const filled = i < rowCounts.length && rowCounts[i] >= 2;
     if (filled) {
       if (bandStart < 0) bandStart = i;
       gapRun = 0;
     } else if (bandStart >= 0) {
       gapRun += 1;
-      if (gapRun >= 3 || i === rowCounts.length) {
+      if (gapRun >= 2 || i === rowCounts.length) {
         const end = i - gapRun + 1;
-        if (end - bandStart > bestBandBottom - bestBandTop) {
-          bestBandTop = top + bandStart;
-          bestBandBottom = top + end;
-        }
+        bands.push({ top: top + bandStart, bottom: top + end, height: end - bandStart });
         bandStart = -1;
         gapRun = 0;
       }
     }
   }
 
-  if (bestBandBottom - bestBandTop < 20) {
+  if (bands.length === 0) {
     return null;
   }
 
+  const mainBand = bands.reduce((best, cur) => (cur.height > best.height ? cur : best), bands[0]);
+  if (mainBand.height < 20) {
+    return null;
+  }
+
+  const keptBands = bands.filter((band) => {
+    const isBottomCaption =
+      band !== mainBand &&
+      band.height <= 18 &&
+      band.bottom > top + Math.round(rowCounts.length * 0.8) &&
+      band.top - mainBand.bottom >= 10;
+    return !isBottomCaption;
+  });
+
+  const activeTop = Math.min(...keptBands.map((b) => b.top));
+  const activeBottom = Math.max(...keptBands.map((b) => b.bottom));
+
   let minX = right;
   let maxX = left - 1;
-  let minY = bestBandBottom;
-  let maxY = bestBandTop - 1;
+  let minY = activeBottom;
+  let maxY = activeTop - 1;
 
-  for (let y = bestBandTop; y < bestBandBottom; y += 1) {
-    for (let x = left; x < right; x += 1) {
-      if (mask[y * fullW + x]) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
+  for (const band of keptBands) {
+    for (let y = band.top; y < band.bottom; y += 1) {
+      for (let x = left; x < right; x += 1) {
+        if (mask[y * fullW + x]) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
       }
     }
   }
@@ -838,8 +858,12 @@ function drawPoseInCell(
   baseScale: number,
   opts: DrawPoseOptions
 ): void {
+  const offsetX = opts.offsetX ?? 0;
+  const offsetY = opts.offsetY ?? 0;
   const maxWidthScale = MAX_POSE_WIDTH / Math.max(1, pose.width);
-  const s = Math.min(baseScale, maxWidthScale) * (opts.scaleMul ?? 1);
+  const availableHeight = Math.max(48, FOOT_Y - 8 - Math.max(0, -offsetY));
+  const maxHeightScale = availableHeight / Math.max(1, pose.height);
+  const s = Math.min(baseScale, maxWidthScale, maxHeightScale) * (opts.scaleMul ?? 1);
   let sx = s * (opts.scaleX ?? 1);
   let sy = s * (opts.scaleY ?? 1);
 
@@ -863,8 +887,8 @@ function drawPoseInCell(
 
   // Source generated poses face RIGHT -> flip horizontally so canonical pose faces LEFT
   const flippedFootX = (pose.width - pose.feetX) * sx;
-  let anchorX = cellX + CELL / 2 + (opts.offsetX ?? 0);
-  let anchorY = cellY + FOOT_Y + (opts.offsetY ?? 0);
+  let anchorX = cellX + CELL / 2 + offsetX;
+  let anchorY = cellY + FOOT_Y + offsetY;
   let drawLeft: number;
 
   if (angle !== 0) {
@@ -895,19 +919,20 @@ function drawPoseInCell(
       if (ry > maxRy) maxRy = ry;
     }
 
-    const desiredMidX = cellX + CELL / 2 + (opts.offsetX ?? 0);
+    const desiredMidX = cellX + CELL / 2 + offsetX;
     const rawAnchorX = desiredMidX - (minRx + maxRx) / 2;
     anchorX = Math.max(cellX + 8 - minRx, Math.min(cellX + CELL - 8 - maxRx, rawAnchorX));
 
-    const rawAnchorY = cellY + FOOT_Y + (opts.offsetY ?? 0) - maxRy;
+    const rawAnchorY = cellY + FOOT_Y + offsetY - maxRy;
     anchorY = Math.max(cellY + 8 - minRy, Math.min(cellY + CELL - 8 - maxRy, rawAnchorY));
     drawLeft = localLeft;
   } else {
-    // Clamp horizontal draw inside cell so weapons never bleed into adjacent frame
+    // Clamp draw rect inside [cellX + 4, cellX + CELL - 4] accounting for offsetX/offsetY so skills never clip
     const rawLeft = -flippedFootX;
-    const minLeft = -CELL / 2 + 2;
-    const maxLeft = CELL / 2 - 2 - drawW;
+    const minLeft = -CELL / 2 + 4 - offsetX;
+    const maxLeft = CELL / 2 - 4 - drawW - offsetX;
     drawLeft = Math.max(minLeft, Math.min(maxLeft, rawLeft));
+    anchorY = Math.max(cellY + drawH + 4, Math.min(cellY + CELL - 4, anchorY));
   }
 
   ctx.save();

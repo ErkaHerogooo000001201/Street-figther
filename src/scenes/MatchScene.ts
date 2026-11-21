@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 
 import {
+  setStageMusicDucked,
   startStageMusic,
   stopStageMusic,
   updateStageMusicSettings,
@@ -8,13 +9,13 @@ import {
 } from '../game/core/stageMusic';
 import { getVoiceLine, playCharacterVoice, warmFighterVoices } from '../game/core/voiceAudio';
 import { ensureCrossoverFighterPrepared } from '../game/crossoverRenderer';
-import { Fighter, NEUTRAL_FIGHTER_INPUT, type FighterInput } from '../game/fighter';
+import { Fighter, NEUTRAL_FIGHTER_INPUT, type BlockOutcome, type FighterInput } from '../game/fighter';
 import { getCharacterDefinition } from '../game/hero';
 import { MatchHud } from '../game/matchHud';
 import { getStageDefinition } from '../game/stageConfig';
 import { playSuperCutIn } from '../game/superCutIn';
 import { SCENE_KEYS, type BotDifficulty, type MatchConfig } from '../game/types';
-import { spawnHitSpark, type VfxColor } from '../game/vfx';
+import { spawnHitSpark, spawnKoFinishVfx, type VfxColor } from '../game/vfx';
 import { BaseScene } from './BaseScene';
 
 const GROUND_FRACTION = 0.82;
@@ -26,7 +27,7 @@ const SPAWN_OFFSET_FRACTION = 0.18;
 const CAMERA_LERP = 0.14;
 
 const ROUNDS_TO_WIN = 2;
-const ROUND_SECONDS = 60;
+const ROUND_SECONDS = 90;
 const HUD_DEPTH = 100;
 const BANNER_DEPTH = 200;
 const OVERLAY_DEPTH = 300;
@@ -49,22 +50,13 @@ interface TouchInputState {
   block: boolean;
   jumpQueued: boolean;
   lightQueued: boolean;
+  heavyQueued: boolean;
   specialQueued: boolean;
-}
-
-interface SpectatorActor {
-  container: Phaser.GameObjects.Container;
-  baseY: number;
-  leftArm: Phaser.GameObjects.Rectangle;
-  rightArm: Phaser.GameObjects.Rectangle;
-  idleTween?: Phaser.Tweens.Tween;
-  exciteUntil: number;
 }
 
 /**
  * The versus match: two fighters face off in a best-of-3 match. Supports
- * difficulty-scaled 1vCPU controls, full 1v1 local multiplayer, and live Earth
- * stage spectators reacting to combat.
+ * difficulty-scaled 1vCPU controls and full 1v1 local multiplayer.
  */
 export class MatchScene extends BaseScene {
   private config: MatchConfig = {
@@ -96,8 +88,11 @@ export class MatchScene extends BaseScene {
   private hud!: MatchHud;
   private banner!: Phaser.GameObjects.Text;
   private roundTimeMs = ROUND_SECONDS * 1000;
+  private koFreezeRemainingMs = 0;
+  private paused = false;
   private overlay: Phaser.GameObjects.GameObject[] = [];
-  private spectators: SpectatorActor[] = [];
+  private pauseOverlay: Phaser.GameObjects.GameObject[] = [];
+  private pauseBtn?: Phaser.GameObjects.Text;
 
   private touchState: TouchInputState = {
     left: false,
@@ -105,6 +100,7 @@ export class MatchScene extends BaseScene {
     block: false,
     jumpQueued: false,
     lightQueued: false,
+    heavyQueued: false,
     specialQueued: false
   };
   private specialPadBtn?: Phaser.GameObjects.Rectangle;
@@ -128,21 +124,27 @@ export class MatchScene extends BaseScene {
     this.roundNumber = 1;
     this.p1Wins = 0;
     this.p2Wins = 0;
+    this.paused = false;
     this.overlay = [];
-    this.spectators = [];
+    this.pauseOverlay = [];
+    this.pauseBtn = undefined;
+    this.koFreezeRemainingMs = 0;
     this.specialPadBtn = undefined;
     this.specialPadLabel = undefined;
+    this.cleanupPauseSystems();
     this.touchState = {
       left: false,
       right: false,
       block: false,
       jumpQueued: false,
       lightQueued: false,
+      heavyQueued: false,
       specialQueued: false
     };
 
     this.markActiveScene(SCENE_KEYS.Match);
     this.cameras.main.setBackgroundColor(0x05070d);
+    this.input.addPointer(3);
 
     ensureCrossoverFighterPrepared(this, this.config.p1CharacterId);
     ensureCrossoverFighterPrepared(this, this.config.p2CharacterId);
@@ -150,11 +152,15 @@ export class MatchScene extends BaseScene {
 
     const groundY = Math.round(this.cameras.main.height * GROUND_FRACTION);
     this.buildStage();
-    this.buildEarthSpectators(groundY);
     this.spawnFighters(groundY);
     this.registerKeys();
     this.createControlsLegend();
-    if (this.config.mode === '1vcpu') {
+
+    const isTouchDevice =
+      this.app.isMobileShell ||
+      this.sys.game.device.input.touch ||
+      (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
+    if (this.config.mode === '1vcpu' || isTouchDevice) {
       this.createOnScreenPad();
     }
 
@@ -166,6 +172,8 @@ export class MatchScene extends BaseScene {
       depth: HUD_DEPTH
     });
     this.hud.slideIn();
+
+    this.pauseBtn = this.createPauseButton(this.cameras.main.centerX, 126);
 
     this.banner = this.add
       .text(this.cameras.main.centerX, this.cameras.main.centerY - 40, '', {
@@ -205,13 +213,11 @@ export class MatchScene extends BaseScene {
     this.startRound();
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.paused = false;
+      this.cleanupPauseSystems();
+      this.destroyPauseOverlay();
       unsubscribeMusicSettings();
       stopStageMusic();
-      this.spectators.forEach((s) => {
-        s.idleTween?.stop();
-        s.container.destroy(true);
-      });
-      this.spectators = [];
       this.p1?.destroy();
       this.p2?.destroy();
       this.hud?.destroy();
@@ -219,6 +225,24 @@ export class MatchScene extends BaseScene {
   }
 
   update(time: number, delta: number): void {
+    if (this.paused) {
+      return;
+    }
+
+    if (this.koFreezeRemainingMs > 0) {
+      this.koFreezeRemainingMs = Math.max(0, this.koFreezeRemainingMs - delta);
+      this.updateCamera(false);
+      this.hud.setMeter(
+        this.p1.meter01,
+        this.p2.meter01,
+        this.p1.cooldownRemainingSeconds,
+        this.p2.cooldownRemainingSeconds
+      );
+      this.hud.setTime(Math.ceil(this.roundTimeMs / 1000));
+      this.hud.updateWins(this.p1Wins, this.p2Wins);
+      return;
+    }
+
     const seconds = delta / 1000;
     const fighting = this.phase === 'fighting';
 
@@ -234,7 +258,6 @@ export class MatchScene extends BaseScene {
 
     this.p1.faceToward(this.p2.x);
     this.p2.faceToward(this.p1.x);
-    this.updateSpectatorFacing();
 
     if (fighting) {
       if (isActing(p1Input)) {
@@ -307,14 +330,15 @@ export class MatchScene extends BaseScene {
         ? { ...attack.profile, knockback: attack.profile.knockback * 1.6, hitstun: attack.profile.hitstun * 1.35 }
         : attack.profile;
 
-      defender.applyHit(profile, attacker.facingDirection, blocked);
-      defender.flashHit(blocked);
+      const outcome = defender.applyHit(profile, attacker.facingDirection, blocked);
+      defender.flashHit(blocked, outcome);
       attacker.markAttackConnected(attack.signature);
-      attacker.registerOffense(blocked, isSpecial);
-      defender.registerDefense(blocked);
+      const countAsBlocked = outcome === 'block' || outcome === 'parry';
+      attacker.registerOffense(countAsBlocked, isSpecial);
+      defender.registerDefense(countAsBlocked);
 
       const specialColor = attacker.getSpecialSpec().vfxColor;
-      this.spawnHitFx(attack.rect, hurt, blocked, isSpecial, finisher, specialColor);
+      this.spawnHitFx(attack.rect, hurt, blocked, isSpecial, finisher, specialColor, outcome);
     }
   }
 
@@ -324,20 +348,39 @@ export class MatchScene extends BaseScene {
     blocked: boolean,
     isSpecial: boolean,
     finisher: boolean,
-    specialColor: VfxColor
+    specialColor: VfxColor,
+    outcome: BlockOutcome = blocked ? 'block' : 'hit'
   ): void {
     const sparkX = (Phaser.Geom.Rectangle.GetCenter(attackRect).x + Phaser.Geom.Rectangle.GetCenter(hurtRect).x) / 2;
     const sparkY = (Phaser.Geom.Rectangle.GetCenter(attackRect).y + Phaser.Geom.Rectangle.GetCenter(hurtRect).y) / 2;
 
-    const color: VfxColor = blocked ? 'blue' : isSpecial ? specialColor : 'red';
-    const sparkScale = finisher ? 1.65 : isSpecial ? 1.2 : 0.9;
+    const color: VfxColor =
+      outcome === 'parry'
+        ? 'gold'
+        : outcome === 'guardBreak'
+          ? 'orange'
+          : blocked
+            ? 'blue'
+            : isSpecial
+              ? specialColor
+              : 'red';
+    const sparkScale =
+      outcome === 'guardBreak'
+        ? 1.55
+        : outcome === 'parry'
+          ? 1.35
+          : finisher
+            ? 1.65
+            : isSpecial
+              ? 1.2
+              : 0.9;
     spawnHitSpark(this, sparkX, sparkY, color, sparkScale);
 
-    if (!blocked) {
-      this.exciteSpectators(finisher || isSpecial ? 'special' : 'hit');
-    }
-
-    if (finisher) {
+    if (outcome === 'guardBreak') {
+      this.cameras.main.shake(210, 0.012);
+    } else if (outcome === 'parry') {
+      this.cameras.main.shake(70, 0.004);
+    } else if (finisher) {
       this.cameras.main.shake(220, 0.012);
     } else if (isSpecial) {
       this.cameras.main.shake(blocked ? 60 : 100, blocked ? 0.003 : 0.006);
@@ -397,115 +440,6 @@ export class MatchScene extends BaseScene {
     cam.setBounds(0, 0, this.stageWorldWidth, cam.height);
   }
 
-  /**
-   * Populates Earth stages (everything except Space Station) with animated
-   * spectators lining the arena background who react dynamically to combat.
-   */
-  private buildEarthSpectators(groundY: number): void {
-    if (this.config.stageId === 'space-station') {
-      return;
-    }
-
-    const outfits = [
-      { jacket: 0x334155, shirt: 0xe2e8f0, pants: 0x0f172a, hair: 0x1e293b, skin: 0xf1c27d },
-      { jacket: 0x7f1d1d, shirt: 0xf8fafc, pants: 0x1e293b, hair: 0x0f172a, skin: 0xe0ac69 },
-      { jacket: 0x1e3a8a, shirt: 0xfde68a, pants: 0x111827, hair: 0x78350f, skin: 0xffdbac },
-      { jacket: 0x064e3b, shirt: 0xcbd5e1, pants: 0x1e293b, hair: 0x111827, skin: 0xc68642 },
-      { jacket: 0x4c1d95, shirt: 0xfef08a, pants: 0x0f172a, hair: 0x451a03, skin: 0xf1c27d },
-      { jacket: 0x78350f, shirt: 0xe2e8f0, pants: 0x1f2937, hair: 0x09090b, skin: 0x8d5524 }
-    ];
-
-    const minX = 160;
-    const maxX = Math.max(minX + 200, this.stageWorldWidth - 160);
-    const total = 14;
-    const step = (maxX - minX) / Math.max(1, total - 1);
-
-    for (let i = 0; i < total; i += 1) {
-      const palette = outfits[i % outfits.length];
-      const jitterX = ((i * 37) % 31) - 15;
-      const x = Math.round(minX + i * step + jitterX);
-      const depthRow = i % 2 === 0 ? 0 : 1;
-      const y = groundY - (depthRow === 0 ? 18 : 26);
-      const scale = depthRow === 0 ? 0.88 : 0.78;
-
-      const shadow = this.add.ellipse(0, 2, 26, 8, 0x000000, 0.35);
-      const leftLeg = this.add.rectangle(-5, -14, 7, 26, palette.pants, 1).setStrokeStyle(1, 0x020617, 0.8);
-      const rightLeg = this.add.rectangle(5, -14, 7, 26, palette.pants, 1).setStrokeStyle(1, 0x020617, 0.8);
-      const torso = this.add.rectangle(0, -39, 20, 28, palette.jacket, 1).setStrokeStyle(1.5, 0x020617, 0.85);
-      const innerShirt = this.add.rectangle(0, -39, 6, 22, palette.shirt, 0.9);
-      const leftArm = this.add.rectangle(-12, -39, 6, 22, palette.jacket, 1).setOrigin(0.5, 0.15).setStrokeStyle(1, 0x020617, 0.8);
-      const rightArm = this.add.rectangle(12, -39, 6, 22, palette.jacket, 1).setOrigin(0.5, 0.15).setStrokeStyle(1, 0x020617, 0.8);
-      const head = this.add.circle(0, -61, 8.5, palette.skin, 1).setStrokeStyle(1.5, 0x020617, 0.85);
-      const hair = this.add.ellipse(0, -66, 17, 9, palette.hair, 1);
-
-      const container = this.add
-        .container(x, y, [shadow, leftLeg, rightLeg, leftArm, rightArm, torso, innerShirt, head, hair])
-        .setDepth(3 - depthRow * 0.1)
-        .setScale(scale)
-        .setAlpha(0.92);
-
-      const idleTween = this.tweens.add({
-        targets: container,
-        y: y - (3 + (i % 3)),
-        duration: 420 + (i % 4) * 90,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.InOut',
-        delay: (i * 85) % 400
-      });
-
-      this.spectators.push({
-        container,
-        baseY: y,
-        leftArm,
-        rightArm,
-        idleTween,
-        exciteUntil: 0
-      });
-    }
-  }
-
-  private updateSpectatorFacing(): void {
-    if (this.spectators.length === 0) {
-      return;
-    }
-    const midX = (this.p1.x + this.p2.x) / 2;
-    for (const s of this.spectators) {
-      const wantDir = midX >= s.container.x ? 1 : -1;
-      const absScale = Math.abs(s.container.scaleX);
-      s.container.setScale(wantDir * absScale, s.container.scaleY);
-    }
-  }
-
-  private exciteSpectators(level: 'hit' | 'special' | 'ko'): void {
-    if (this.spectators.length === 0) {
-      return;
-    }
-    const jumpPx = level === 'ko' ? 20 : level === 'special' ? 14 : 7;
-    const armAngle = level === 'ko' ? 2.4 : level === 'special' ? 1.9 : 0.9;
-
-    this.spectators.forEach((s, idx) => {
-      if (level === 'hit' && idx % 2 === 1) {
-        return;
-      }
-      this.tweens.add({
-        targets: [s.leftArm, s.rightArm],
-        rotation: -armAngle,
-        duration: 140,
-        yoyo: true,
-        repeat: level === 'ko' ? 3 : 1
-      });
-      this.tweens.add({
-        targets: s.container,
-        y: s.baseY - jumpPx,
-        duration: 150,
-        yoyo: true,
-        repeat: level === 'ko' ? 2 : 0,
-        ease: 'Quad.Out'
-      });
-    });
-  }
-
   private spawnFighters(groundY: number): void {
     const cam = this.cameras.main;
     const minX = EDGE_MARGIN;
@@ -525,12 +459,10 @@ export class MatchScene extends BaseScene {
       maxX,
       depth: DEPTH_FRONT,
       onSpecialStart: (fighter) => {
-        this.exciteSpectators('special');
         playSuperCutIn(this, { characterId: fighter.characterId, side: 'left' });
         this.showVoiceCallout(fighter.x, groundY - 220, getVoiceLine(fighter.characterId, 'special'), '#38bdf8');
       },
       onSecretStart: (fighter, secretSpec) => {
-        this.exciteSpectators('special');
         this.cameras.main.shake(260, 0.012);
         playSuperCutIn(this, {
           characterId: fighter.characterId,
@@ -542,7 +474,15 @@ export class MatchScene extends BaseScene {
         });
         this.showVoiceCallout(fighter.x, groundY - 235, getVoiceLine(fighter.characterId, 'secret'), '#facc15');
       },
-      onComboChange: (fighter, hits) => this.showComboPopup(fighter.x, groundY - 210, hits, '#38bdf8')
+      onComboChange: (fighter, hits) => this.showComboPopup(fighter.x, groundY - 210, hits, '#38bdf8'),
+      onGuardEvent: (fighter, kind) => {
+        if (kind === 'parry') {
+          this.showGuardCallout(fighter.x, groundY - 228, 'PARRY!', '#facc15');
+        } else {
+          this.showGuardCallout(fighter.x, groundY - 228, 'GUARD BREAK!', '#f97316');
+          this.cameras.main.shake(210, 0.011);
+        }
+      }
     });
 
     this.p2 = new Fighter({
@@ -556,12 +496,10 @@ export class MatchScene extends BaseScene {
       maxX,
       depth: DEPTH_BACK,
       onSpecialStart: (fighter) => {
-        this.exciteSpectators('special');
         playSuperCutIn(this, { characterId: fighter.characterId, side: 'right' });
         this.showVoiceCallout(fighter.x, groundY - 220, getVoiceLine(fighter.characterId, 'special'), '#f43f5e');
       },
       onSecretStart: (fighter, secretSpec) => {
-        this.exciteSpectators('special');
         this.cameras.main.shake(260, 0.012);
         playSuperCutIn(this, {
           characterId: fighter.characterId,
@@ -573,7 +511,39 @@ export class MatchScene extends BaseScene {
         });
         this.showVoiceCallout(fighter.x, groundY - 235, getVoiceLine(fighter.characterId, 'secret'), '#facc15');
       },
-      onComboChange: (fighter, hits) => this.showComboPopup(fighter.x, groundY - 210, hits, '#f43f5e')
+      onComboChange: (fighter, hits) => this.showComboPopup(fighter.x, groundY - 210, hits, '#f43f5e'),
+      onGuardEvent: (fighter, kind) => {
+        if (kind === 'parry') {
+          this.showGuardCallout(fighter.x, groundY - 228, 'PARRY!', '#facc15');
+        } else {
+          this.showGuardCallout(fighter.x, groundY - 228, 'GUARD BREAK!', '#f97316');
+          this.cameras.main.shake(210, 0.011);
+        }
+      }
+    });
+  }
+
+  private showGuardCallout(x: number, y: number, text: string, color: string): void {
+    const label = this.add
+      .text(x, y, text, {
+        color,
+        fontFamily: 'monospace',
+        fontSize: '24px',
+        fontStyle: 'bold',
+        stroke: '#020617',
+        strokeThickness: 6
+      })
+      .setOrigin(0.5)
+      .setDepth(BANNER_DEPTH - 2);
+
+    this.tweens.add({
+      targets: label,
+      y: y - 38,
+      alpha: 0,
+      scale: 1.15,
+      duration: 620,
+      ease: 'Cubic.Out',
+      onComplete: () => label.destroy()
     });
   }
 
@@ -696,15 +666,37 @@ export class MatchScene extends BaseScene {
       };
     }
 
-    keyboard.on('keydown-ESC', () => this.goToMenu());
-    keyboard.on('keydown-BACKSPACE', () => this.goToMenu());
+    keyboard.on('keydown-ESC', () => {
+      if (this.phase === 'matchOver') {
+        this.goToMenu();
+        return;
+      }
+      this.togglePause();
+    });
+    keyboard.on('keydown-P', () => {
+      if (this.phase !== 'matchOver') {
+        this.togglePause();
+      }
+    });
+    keyboard.on('keydown-M', () => {
+      if (this.paused) {
+        this.toggleMuteFromPause();
+      }
+    });
+    keyboard.on('keydown-BACKSPACE', () => {
+      if (this.paused || this.phase === 'matchOver') {
+        this.goToMenu();
+      }
+    });
     keyboard.on('keydown-R', () => {
       if (this.phase === 'matchOver') {
         this.rematch();
+      } else if (this.paused) {
+        this.restartFromPause();
       }
     });
     keyboard.on('keydown-C', () => {
-      if (this.phase === 'matchOver') {
+      if (this.phase === 'matchOver' || this.paused) {
         this.changeFighters();
       }
     });
@@ -718,10 +710,12 @@ export class MatchScene extends BaseScene {
     input.block = input.block || this.touchState.block;
     input.jump = input.jump || this.touchState.jumpQueued;
     input.light = input.light || this.touchState.lightQueued;
+    input.heavy = input.heavy || this.touchState.heavyQueued;
     input.special = input.special || this.touchState.specialQueued;
 
     this.touchState.jumpQueued = false;
     this.touchState.lightQueued = false;
+    this.touchState.heavyQueued = false;
     this.touchState.specialQueued = false;
 
     return input;
@@ -748,16 +742,16 @@ export class MatchScene extends BaseScene {
     const { centerX, height } = this.cameras.main;
     const text =
       this.config.mode === '1vcpu'
-        ? 'Move: A/D or Arrows  •  Jump: W/Up  •  Block: S/Down  •  Combo: Space/F  •  Special: E/V  •  Esc Menu'
-        : 'P1: WASD, S Block, F/G Attack, E/V Special   •   P2: Arrows, Down Block, J/K Attack, L Special   •   Esc Menu';
+        ? 'Move: A/D or Arrows  •  Jump: W/Up  •  Tap Block = Parry / Hold = Guard  •  Attack: Space/F/G  •  Special: E/V  •  Esc/P Pause'
+        : 'P1: WASD, S Guard/Parry, F/G Attack, E/V Special   •   P2: Arrows, Down Guard/Parry, J/K Attack, L Special   •   Esc/P Pause';
 
     this.add
-      .text(centerX, height - 20, text, {
+      .text(centerX, height - 16, text, {
         color: '#cbd5f5',
         fontFamily: 'monospace',
-        fontSize: '12px',
+        fontSize: '11px',
         backgroundColor: 'rgba(2, 6, 23, 0.72)',
-        padding: { x: 12, y: 5 }
+        padding: { x: 10, y: 4 }
       })
       .setOrigin(0.5)
       .setDepth(HUD_DEPTH)
@@ -766,26 +760,29 @@ export class MatchScene extends BaseScene {
 
   private createOnScreenPad(): void {
     const { width, height } = this.cameras.main;
-    const y = height - 68;
+    const y = height - 74;
 
-    this.makeHoldPadButton(56, y, 58, 46, '◀', 0x1e293b, (down) => {
+    this.makeHoldPadButton(58, y, 72, 62, '◀', 0x1e293b, (down) => {
       this.touchState.left = down;
     });
-    this.makeHoldPadButton(124, y, 58, 46, '▶', 0x1e293b, (down) => {
+    this.makeHoldPadButton(142, y, 72, 62, '▶', 0x1e293b, (down) => {
       this.touchState.right = down;
     });
-    this.makeTapPadButton(196, y, 66, 46, 'JUMP', 0x1e293b, () => {
+    this.makeTapPadButton(232, y, 82, 62, 'JUMP', 0x1e293b, () => {
       this.touchState.jumpQueued = true;
     });
 
-    this.makeHoldPadButton(width - 260, y, 78, 46, 'BLOCK', 0x1e3a8a, (down) => {
+    this.makeHoldPadButton(width - 358, y, 84, 62, 'BLOCK', 0x1e3a8a, (down) => {
       this.touchState.block = down;
     });
-    this.makeTapPadButton(width - 170, y, 82, 46, 'COMBO', 0x7f1d1d, () => {
+    this.makeTapPadButton(width - 262, y, 84, 62, 'PUNCH', 0x7f1d1d, () => {
       this.touchState.lightQueued = true;
     });
+    this.makeTapPadButton(width - 168, y, 80, 62, 'KICK', 0x9a3412, () => {
+      this.touchState.heavyQueued = true;
+    });
 
-    const specialPair = this.makeTapPadButton(width - 72, y, 96, 46, 'SPECIAL', 0x334155, () => {
+    const specialPair = this.makeTapPadButton(width - 66, y, 96, 62, 'SPECIAL', 0x334155, () => {
       this.touchState.specialQueued = true;
     });
     this.specialPadBtn = specialPair.rect;
@@ -802,7 +799,7 @@ export class MatchScene extends BaseScene {
     onToggle: (down: boolean) => void
   ): void {
     const rect = this.add
-      .rectangle(x, y, w, h, fill, 0.72)
+      .rectangle(x, y, w, h, fill, 0.74)
       .setStrokeStyle(2, 0x64748b, 0.9)
       .setDepth(HUD_DEPTH)
       .setScrollFactor(0)
@@ -812,25 +809,33 @@ export class MatchScene extends BaseScene {
       .text(x, y, caption, {
         color: '#f8fafc',
         fontFamily: 'monospace',
-        fontSize: '13px',
+        fontSize: '14px',
         fontStyle: 'bold'
       })
       .setOrigin(0.5)
       .setDepth(HUD_DEPTH + 1)
       .setScrollFactor(0);
 
-    rect.on('pointerdown', () => {
-      rect.setFillStyle(0x38bdf8, 0.9);
-      onToggle(true);
+    const activePointers = new Set<number>();
+    const syncState = (): void => {
+      const down = activePointers.size > 0;
+      rect.setFillStyle(down ? 0x38bdf8 : fill, down ? 0.92 : 0.74);
+      onToggle(down);
+    };
+
+    rect.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      activePointers.add(pointer.id);
+      syncState();
     });
-    rect.on('pointerup', () => {
-      rect.setFillStyle(fill, 0.72);
-      onToggle(false);
-    });
-    rect.on('pointerout', () => {
-      rect.setFillStyle(fill, 0.72);
-      onToggle(false);
-    });
+    const release = (pointer: Phaser.Input.Pointer): void => {
+      if (activePointers.delete(pointer.id)) {
+        syncState();
+      }
+    };
+    rect.on('pointerup', release);
+    rect.on('pointerupoutside', release);
+    rect.on('pointercancel', release);
+    rect.on('pointerout', release);
   }
 
   private makeTapPadButton(
@@ -853,7 +858,7 @@ export class MatchScene extends BaseScene {
       .text(x, y, caption, {
         color: '#f8fafc',
         fontFamily: 'monospace',
-        fontSize: '13px',
+        fontSize: '14px',
         fontStyle: 'bold'
       })
       .setOrigin(0.5)
@@ -864,8 +869,13 @@ export class MatchScene extends BaseScene {
       rect.setScale(0.94);
       onTap();
     });
-    rect.on('pointerup', () => rect.setScale(1));
-    rect.on('pointerout', () => rect.setScale(1));
+    const resetScale = (): void => {
+      rect.setScale(1);
+    };
+    rect.on('pointerup', resetScale);
+    rect.on('pointerupoutside', resetScale);
+    rect.on('pointercancel', resetScale);
+    rect.on('pointerout', resetScale);
 
     return { rect, label };
   }
@@ -892,6 +902,8 @@ export class MatchScene extends BaseScene {
   private startRound(): void {
     this.phase = 'intro';
     this.roundTimeMs = ROUND_SECONDS * 1000;
+    this.koFreezeRemainingMs = 0;
+    this.cameras.main.setZoom(1);
 
     const fullMin = EDGE_MARGIN;
     const fullMax = this.stageWorldWidth - EDGE_MARGIN;
@@ -928,7 +940,7 @@ export class MatchScene extends BaseScene {
     }
 
     this.phase = 'roundEnd';
-    this.exciteSpectators('ko');
+    this.hud.applyHealth(this.p1.health01, this.p2.health01);
 
     if (winner === 1) {
       this.p1Wins += 1;
@@ -941,11 +953,41 @@ export class MatchScene extends BaseScene {
       winner === 1
         ? `P1 ${getCharacterDefinition(this.config.p1CharacterId).label}`
         : `${this.config.mode === '1vcpu' ? 'CPU' : 'P2'} ${getCharacterDefinition(this.config.p2CharacterId).label}`;
-    this.showBanner(bannerText, bannerColor, 1.2);
-    const koLine = playCharacterVoice(winnerId, 'ko', this.app.settingsStore.getState());
-    this.showVoiceCallout(this.cameras.main.centerX, this.cameras.main.centerY + 48, koLine, bannerColor);
 
-    this.time.delayedCall(1100, () => {
+    const isKo = bannerText === 'K.O.';
+    if (isKo) {
+      const loser = winner === 1 ? this.p2 : this.p1;
+      const groundY = Math.round(this.cameras.main.height * GROUND_FRACTION);
+      this.koFreezeRemainingMs = 240;
+
+      spawnKoFinishVfx(this, loser.x, groundY, 0xf43f5e);
+      const cam = this.cameras.main;
+      cam.shake(380, 0.018);
+      cam.zoomTo(1.14, 150, Phaser.Math.Easing.Cubic.Out, true);
+      this.time.delayedCall(650, () => {
+        if (!this.scene.isActive()) {
+          return;
+        }
+        cam.zoomTo(1, 420, Phaser.Math.Easing.Cubic.Out, true);
+      });
+
+      this.showKoSlamBanner('K.O.!!');
+    } else {
+      this.showBanner(bannerText, bannerColor, 1.2);
+    }
+
+    let koLine = getVoiceLine(winnerId, 'ko');
+    try {
+      koLine = playCharacterVoice(winnerId, 'ko', this.app.settingsStore.getState());
+    } catch {
+      // Keep fallback voice line if audio context is unavailable
+    }
+    this.showVoiceCallout(this.cameras.main.centerX, this.cameras.main.centerY + 62, koLine, bannerColor);
+
+    this.time.delayedCall(isKo ? 1650 : 1100, () => {
+      if (!this.scene.isActive()) {
+        return;
+      }
       const matchOver = this.p1Wins >= ROUNDS_TO_WIN || this.p2Wins >= ROUNDS_TO_WIN;
 
       if (matchOver) {
@@ -1021,6 +1063,260 @@ export class MatchScene extends BaseScene {
     return button;
   }
 
+  private createPauseButton(x: number, y: number): Phaser.GameObjects.Text {
+    const btn = this.add
+      .text(x, y, '⏸ PAUSE', {
+        color: '#e2e8f0',
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+        padding: { x: 18, y: 12 },
+        stroke: '#334155',
+        strokeThickness: 2
+      })
+      .setOrigin(0.5)
+      .setDepth(HUD_DEPTH + 5)
+      .setScrollFactor(0)
+      .setInteractive({ useHandCursor: true });
+
+    btn.on('pointerover', () => btn.setColor('#facc15'));
+    btn.on('pointerout', () => btn.setColor('#e2e8f0'));
+    btn.on('pointerdown', () => this.togglePause());
+    return btn;
+  }
+
+  private togglePause(): void {
+    if (this.phase === 'matchOver') {
+      return;
+    }
+    if (this.paused) {
+      this.resumeMatch();
+    } else {
+      this.pauseMatch();
+    }
+  }
+
+  private pauseMatch(): void {
+    if (this.paused || this.phase === 'matchOver') {
+      return;
+    }
+
+    this.paused = true;
+    this.touchState.left = false;
+    this.touchState.right = false;
+    this.touchState.block = false;
+    this.touchState.jumpQueued = false;
+    this.touchState.lightQueued = false;
+    this.touchState.heavyQueued = false;
+    this.touchState.specialQueued = false;
+
+    this.time.paused = true;
+    this.tweens.pauseAll();
+    this.anims.pauseAll();
+    setStageMusicDucked(true);
+    this.pauseBtn?.setText('▶ RESUME');
+
+    this.buildPauseOverlay();
+  }
+
+  private resumeMatch(): void {
+    if (!this.paused) {
+      return;
+    }
+
+    this.paused = false;
+    this.destroyPauseOverlay();
+    this.cleanupPauseSystems();
+    this.pauseBtn?.setText('⏸ PAUSE');
+  }
+
+  private cleanupPauseSystems(): void {
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    this.anims.resumeAll();
+    setStageMusicDucked(false);
+  }
+
+  private destroyPauseOverlay(): void {
+    this.pauseOverlay.forEach((object) => object.destroy());
+    this.pauseOverlay = [];
+  }
+
+  private buildPauseOverlay(): void {
+    this.destroyPauseOverlay();
+    const { centerX, centerY, width, height } = this.cameras.main;
+    const depth = OVERLAY_DEPTH + 20;
+    const stageLabel = getStageDefinition(this.config.stageId).label.toUpperCase();
+
+    const dim = this.add
+      .rectangle(centerX, centerY, width, height, 0x020617, 0.74)
+      .setDepth(depth)
+      .setScrollFactor(0)
+      .setInteractive();
+
+    const panel = this.add
+      .rectangle(centerX, centerY, 440, 446, 0x0f172a, 0.96)
+      .setStrokeStyle(2, 0x334155, 1)
+      .setDepth(depth + 1)
+      .setScrollFactor(0);
+
+    const title = this.add
+      .text(centerX, centerY - 170, 'PAUSED', {
+        color: '#facc15',
+        fontFamily: 'monospace',
+        fontSize: '38px',
+        fontStyle: 'bold',
+        stroke: '#020617',
+        strokeThickness: 6
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 2)
+      .setScrollFactor(0);
+
+    const subtitle = this.add
+      .text(centerX, centerY - 130, `${stageLabel}  ·  ROUND ${this.roundNumber}`, {
+        color: '#94a3b8',
+        fontFamily: 'monospace',
+        fontSize: '14px'
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 2)
+      .setScrollFactor(0);
+
+    const resumeBtn = this.makePauseButton(
+      centerX,
+      centerY - 70,
+      'Resume Match  (Esc / P)',
+      depth + 2,
+      true,
+      () => this.resumeMatch()
+    );
+
+    const soundBtn = this.makePauseButton(
+      centerX,
+      centerY - 10,
+      this.getPauseSoundLabel(),
+      depth + 2,
+      false,
+      () => this.toggleMuteFromPause()
+    );
+    soundBtn.setData('pauseSoundBtn', true);
+
+    const restartBtn = this.makePauseButton(
+      centerX,
+      centerY + 50,
+      'Restart Match  (R)',
+      depth + 2,
+      false,
+      () => this.restartFromPause()
+    );
+
+    const fighterBtn = this.makePauseButton(
+      centerX,
+      centerY + 110,
+      'Change Fighter  (C)',
+      depth + 2,
+      false,
+      () => this.changeFighters()
+    );
+
+    const menuBtn = this.makePauseButton(
+      centerX,
+      centerY + 170,
+      'Main Menu',
+      depth + 2,
+      false,
+      () => this.goToMenu()
+    );
+
+    this.pauseOverlay = [
+      dim,
+      panel,
+      title,
+      subtitle,
+      resumeBtn.bg,
+      resumeBtn.label,
+      soundBtn.bg,
+      soundBtn.label,
+      restartBtn.bg,
+      restartBtn.label,
+      fighterBtn.bg,
+      fighterBtn.label,
+      menuBtn.bg,
+      menuBtn.label
+    ];
+  }
+
+  private getPauseSoundLabel(): string {
+    return this.app.settingsStore.getState().muted ? 'Sound: MUTED  (M)' : 'Sound: ON  (M)';
+  }
+
+  private toggleMuteFromPause(): void {
+    const current = this.app.settingsStore.getState();
+    this.app.settingsStore.patchState({ muted: !current.muted });
+    for (const item of this.pauseOverlay) {
+      if (item instanceof Phaser.GameObjects.Rectangle && item.getData('pauseSoundBtn')) {
+        const label = item.getData('labelRef') as Phaser.GameObjects.Text | undefined;
+        label?.setText(this.getPauseSoundLabel());
+      }
+    }
+  }
+
+  private makePauseButton(
+    x: number,
+    y: number,
+    caption: string,
+    depth: number,
+    primary: boolean,
+    onClick: () => void
+  ): { bg: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text; setData: (k: string, v: unknown) => void } {
+    const baseFill = primary ? 0x1e293b : 0x0f172a;
+    const baseStroke = primary ? 0xfacc15 : 0x334155;
+    const baseText = primary ? '#facc15' : '#e2e8f0';
+
+    const bg = this.add
+      .rectangle(x, y, 356, 48, baseFill, 0.96)
+      .setStrokeStyle(2, baseStroke, 1)
+      .setDepth(depth)
+      .setScrollFactor(0)
+      .setInteractive({ useHandCursor: true });
+
+    const label = this.add
+      .text(x, y, caption, {
+        color: baseText,
+        fontFamily: 'monospace',
+        fontSize: '18px',
+        fontStyle: primary ? 'bold' : 'normal'
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setScrollFactor(0);
+
+    bg.setData('labelRef', label);
+
+    bg.on('pointerover', () => {
+      bg.setFillStyle(0x1e293b, 1).setStrokeStyle(2, 0xfacc15, 1);
+      label.setColor('#facc15');
+    });
+    bg.on('pointerout', () => {
+      bg.setFillStyle(baseFill, 0.96).setStrokeStyle(2, baseStroke, 1);
+      label.setColor(baseText);
+    });
+    bg.on('pointerdown', onClick);
+
+    return {
+      bg,
+      label,
+      setData: (k: string, v: unknown) => bg.setData(k, v)
+    };
+  }
+
+  private restartFromPause(): void {
+    this.resumeMatch();
+    this.rematch();
+  }
+
   private rematch(): void {
     this.overlay.forEach((object) => object.destroy());
     this.overlay = [];
@@ -1032,6 +1328,9 @@ export class MatchScene extends BaseScene {
   }
 
   private changeFighters(): void {
+    this.paused = false;
+    this.destroyPauseOverlay();
+    this.cleanupPauseSystems();
     this.scene.start(SCENE_KEYS.CharacterSelect, {
       mode: this.config.mode,
       stageId: this.config.stageId,
@@ -1039,10 +1338,17 @@ export class MatchScene extends BaseScene {
     });
   }
 
+  protected override goToMenu(): void {
+    this.paused = false;
+    this.destroyPauseOverlay();
+    this.cleanupPauseSystems();
+    super.goToMenu();
+  }
+
   private showMusicToast(theme: StageMusicTheme): void {
     const { centerX } = this.cameras.main;
     const toast = this.add
-      .text(centerX, 114, `♪ ${theme.title}  •  ${theme.genre}`, {
+      .text(centerX, 158, `♪ ${theme.title}  •  ${theme.genre}`, {
         color: '#f8fafc',
         fontFamily: 'monospace',
         fontSize: '13px',
@@ -1074,8 +1380,19 @@ export class MatchScene extends BaseScene {
   }
 
   private showBanner(text: string, color: string, peakScale = 1): void {
-    this.banner.setText(text).setColor(color).setScale(0.6).setAlpha(0);
+    this.banner.setStroke('#020617', 8).setText(text).setColor(color).setScale(0.6).setAlpha(0);
     this.tweens.add({ targets: this.banner, alpha: 1, scale: peakScale, duration: 260, ease: 'Back.Out' });
+  }
+
+  private showKoSlamBanner(text: string): void {
+    this.banner.setText(text).setColor('#facc15').setStroke('#9f1239', 12).setScale(2.4).setAlpha(0);
+    this.tweens.add({
+      targets: this.banner,
+      alpha: 1,
+      scale: 1.35,
+      duration: 210,
+      ease: 'Back.Out'
+    });
   }
 
   private hideBanner(): void {

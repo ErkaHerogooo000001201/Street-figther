@@ -245,6 +245,10 @@ input {
     var(--bg-deep);
   box-shadow: var(--shadow-wire), inset 0 0 0 2px var(--bg-deep);
   overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .game-root canvas {
@@ -253,6 +257,10 @@ input {
   image-rendering: crisp-edges;
   position: relative;
   z-index: 1;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .bg-video {

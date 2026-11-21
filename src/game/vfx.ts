@@ -544,3 +544,147 @@ export function spawnCataclysmBurstVfx(
   spawnCycloneRingsVfx(scene, impactX, groundY, secondaryColor, themeColor);
 }
 
+/**
+ * Dramatic anime-fighter K.O. finish burst: screen-wide white-to-crimson flash,
+ * slamming cinema bars, double expanding shockwave rings, radial speed rays,
+ * and flying spark shards centered on the defeated fighter.
+ */
+export function spawnKoFinishVfx(
+  scene: Phaser.Scene,
+  x: number,
+  groundY: number,
+  accentColor = 0xf43f5e
+): void {
+  const cam = scene.cameras.main;
+  const w = cam.width;
+  const h = cam.height;
+  const impactY = groundY - 96;
+
+  // 1. High-contrast white-into-crimson impact flash with guaranteed auto-destroy
+  const whiteFlash = scene.add
+    .rectangle(w / 2, h / 2, w, h, 0xffffff, 0.42)
+    .setScrollFactor(0)
+    .setDepth(VFX_DEPTH + 40);
+  scene.tweens.add({
+    targets: whiteFlash,
+    alpha: 0,
+    duration: 180,
+    ease: 'Cubic.Out',
+    onComplete: () => whiteFlash.destroy()
+  });
+  scene.time.delayedCall(260, () => {
+    if (whiteFlash.scene) {
+      whiteFlash.destroy();
+    }
+  });
+
+  const crimsonVeil = scene.add
+    .rectangle(w / 2, h / 2, w, h, accentColor, 0.3)
+    .setScrollFactor(0)
+    .setDepth(VFX_DEPTH + 39);
+  scene.tweens.add({
+    targets: crimsonVeil,
+    alpha: 0,
+    delay: 90,
+    duration: 520,
+    ease: 'Quad.Out',
+    onComplete: () => crimsonVeil.destroy()
+  });
+  scene.time.delayedCall(720, () => {
+    if (crimsonVeil.scene) {
+      crimsonVeil.destroy();
+    }
+  });
+
+  // 2. Cinema letterbox bars slamming in on top & bottom
+  const topBar = scene.add.rectangle(w / 2, 0, w, 58, 0x020617, 0.94).setOrigin(0.5, 0).setScrollFactor(0).setDepth(VFX_DEPTH + 41);
+  const botBar = scene.add.rectangle(w / 2, h, w, 58, 0x020617, 0.94).setOrigin(0.5, 1).setScrollFactor(0).setDepth(VFX_DEPTH + 41);
+  topBar.setScale(1, 0.05);
+  botBar.setScale(1, 0.05);
+  scene.tweens.add({
+    targets: [topBar, botBar],
+    scaleY: 1,
+    duration: 140,
+    ease: 'Cubic.Out',
+    onComplete: () => {
+      scene.tweens.add({
+        targets: [topBar, botBar],
+        alpha: 0,
+        delay: 980,
+        duration: 320,
+        onComplete: () => {
+          topBar.destroy();
+          botBar.destroy();
+        }
+      });
+    }
+  });
+  scene.time.delayedCall(1600, () => {
+    if (topBar.scene) topBar.destroy();
+    if (botBar.scene) botBar.destroy();
+  });
+
+  // 3. Concentric shockwave rings from KO point
+  const ringConfigs = [
+    { radius: 34, stroke: 8, color: 0xffffff, endScale: 9.5, delay: 0, duration: 480 },
+    { radius: 28, stroke: 6, color: 0xfacc15, endScale: 8.2, delay: 55, duration: 540 },
+    { radius: 24, stroke: 5, color: accentColor, endScale: 7.0, delay: 110, duration: 600 }
+  ];
+  ringConfigs.forEach((cfg) => {
+    const ring = scene.add
+      .circle(x, impactY, cfg.radius, cfg.color, 0)
+      .setStrokeStyle(cfg.stroke, cfg.color, 0.98)
+      .setDepth(VFX_DEPTH + 10);
+    scene.tweens.add({
+      targets: ring,
+      scale: cfg.endScale,
+      alpha: 0,
+      delay: cfg.delay,
+      duration: cfg.duration,
+      ease: 'Cubic.Out',
+      onComplete: () => ring.destroy()
+    });
+  });
+
+  // 4. 12 radial anime speed-rays
+  for (let i = 0; i < 12; i += 1) {
+    const angleDeg = (360 / 12) * i + Phaser.Math.Between(-8, 8);
+    const rayColor = i % 3 === 0 ? 0xffffff : i % 3 === 1 ? 0xfacc15 : accentColor;
+    const ray = scene.add
+      .rectangle(x, impactY, Phaser.Math.Between(140, 260), i % 2 === 0 ? 8 : 5, rayColor, 0.96)
+      .setOrigin(0, 0.5)
+      .setAngle(angleDeg)
+      .setDepth(VFX_DEPTH + 11);
+    scene.tweens.add({
+      targets: ray,
+      scaleX: 2.2,
+      scaleY: 0.15,
+      alpha: 0,
+      duration: 420 + (i % 3) * 70,
+      ease: 'Cubic.Out',
+      onComplete: () => ray.destroy()
+    });
+  }
+
+  // 5. Flying glowing spark shards
+  for (let i = 0; i < 16; i += 1) {
+    const rad = (Math.PI * 2 * i) / 16 + Phaser.Math.FloatBetween(-0.18, 0.18);
+    const dist = Phaser.Math.Between(130, 320);
+    const shard = scene.add
+      .circle(x, impactY, Phaser.Math.Between(4, 8), i % 2 === 0 ? 0xfacc15 : 0xffffff, 1)
+      .setStrokeStyle(2, accentColor, 0.9)
+      .setDepth(VFX_DEPTH + 12);
+    scene.tweens.add({
+      targets: shard,
+      x: x + Math.cos(rad) * dist,
+      y: impactY + Math.sin(rad) * dist * 0.8,
+      scale: 0.15,
+      alpha: 0,
+      duration: Phaser.Math.Between(380, 620),
+      ease: 'Quad.Out',
+      onComplete: () => shard.destroy()
+    });
+  }
+}
+
+

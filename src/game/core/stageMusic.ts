@@ -14,6 +14,7 @@ type BassStyle = 'gallop' | 'war-pulse' | 'analog-16' | 'taiko-drone' | 'chug' |
 type DrumStyle = 'rock' | 'battle' | 'synthwave' | 'taiko' | 'thrash' | 'trance';
 
 interface InternalTrackArrangement extends StageMusicTheme {
+  audioUrl: string;
   bars: number;
   instrument: InstrumentStyle;
   bassStyle: BassStyle;
@@ -31,194 +32,297 @@ interface InternalTrackArrangement extends StageMusicTheme {
 const STAGE_TRACKS: Record<string, InternalTrackArrangement> = {
   'storm-citadel': {
     stageId: 'storm-citadel',
-    title: 'Eclipse Judgment Overture',
-    genre: 'Orchestral Battle Rock',
-    bpm: 148,
+    title: 'Tempest Overlord',
+    genre: 'Extreme Anime Metal',
+    bpm: 174,
     accentColor: '#38bdf8',
+    audioUrl: '',
     bars: 4,
     instrument: 'rock-lead',
     bassStyle: 'gallop',
     drumStyle: 'rock',
-    // Dm -> Bb -> C -> A7 (relentless minor duel)
+    // Em -> C -> D -> B7 (relentless lightning shred)
     chords: [
-      [50, 57, 62, 65],
-      [46, 53, 58, 62],
-      [48, 55, 60, 63],
-      [45, 52, 57, 61]
+      [52, 59, 64, 67],
+      [48, 55, 60, 64],
+      [50, 57, 62, 66],
+      [47, 54, 59, 63]
     ],
     melody: [
-      74, 0, 74, 75, 77, 0, 81, 0, 79, 77, 75, 0, 74, 0, 72, 0,
-      70, 0, 70, 72, 74, 0, 77, 0, 75, 74, 72, 0, 69, 0, 72, 0,
-      74, 0, 75, 77, 81, 0, 82, 0, 81, 79, 77, 0, 75, 0, 74, 0,
-      73, 0, 76, 0, 81, 0, 79, 0, 77, 0, 75, 0, 73, 0, 69, 0
+      76, 79, 83, 88, 86, 83, 79, 76, 74, 76, 79, 83, 86, 0, 83, 81,
+      79, 83, 84, 88, 84, 83, 81, 79, 76, 79, 81, 83, 81, 79, 76, 0,
+      78, 81, 86, 90, 86, 84, 83, 81, 79, 78, 76, 74, 76, 78, 81, 0,
+      75, 79, 83, 87, 91, 87, 83, 79, 83, 81, 79, 76, 75, 76, 79, 0
     ],
     bass: [
-      38, 38, 0, 38, 38, 38, 0, 38, 38, 0, 38, 38, 45, 0, 41, 0,
-      34, 34, 0, 34, 34, 34, 0, 34, 34, 0, 34, 34, 41, 0, 38, 0,
-      36, 36, 0, 36, 36, 36, 0, 36, 36, 0, 36, 36, 43, 0, 39, 0,
-      33, 33, 0, 33, 33, 33, 0, 33, 37, 0, 40, 0, 45, 0, 43, 0
+      40, 40, 40, 47, 40, 40, 47, 40, 40, 40, 40, 47, 47, 43, 40, 43,
+      36, 36, 36, 43, 36, 36, 43, 36, 36, 36, 36, 43, 43, 40, 36, 40,
+      38, 38, 38, 45, 38, 38, 45, 38, 38, 38, 38, 45, 45, 42, 38, 42,
+      35, 35, 39, 42, 47, 42, 39, 35, 47, 42, 39, 35, 39, 42, 47, 35
     ],
     arp: [
-      62, 65, 69, 74, 62, 65, 69, 74, 58, 62, 65, 70, 58, 62, 65, 70,
-      60, 63, 67, 72, 60, 63, 67, 72, 57, 61, 64, 69, 57, 61, 64, 69
+      64, 67, 71, 76, 79, 76, 71, 67, 60, 64, 67, 72, 76, 72, 67, 64,
+      62, 66, 69, 74, 78, 74, 69, 66, 59, 63, 66, 71, 75, 71, 66, 63
     ]
   },
   'rooftop-sunset': {
     stageId: 'rooftop-sunset',
-    title: 'Blood Horizon Showdown',
-    genre: 'Hardcore Arena Brass & Shred',
-    bpm: 146,
+    title: 'Crimson Horizon',
+    genre: 'Extreme Brawl Brass',
+    bpm: 166,
     accentColor: '#fb923c',
+    audioUrl: '',
     bars: 4,
     instrument: 'war-brass',
     bassStyle: 'war-pulse',
     drumStyle: 'battle',
-    // Em -> F -> Dm -> B7 (dark Spanish Phrygian showdown)
+    // Dm -> C -> Bb -> A7 (high-octane rooftop warfare)
     chords: [
-      [40, 47, 52, 55],
-      [41, 48, 53, 57],
       [38, 45, 50, 53],
-      [47, 51, 54, 59]
+      [36, 43, 48, 52],
+      [34, 41, 46, 50],
+      [33, 40, 45, 49]
     ],
     melody: [
-      76, 0, 77, 76, 79, 0, 83, 0, 81, 79, 77, 0, 76, 0, 72, 0,
-      77, 0, 79, 81, 84, 0, 81, 0, 79, 77, 76, 0, 74, 0, 71, 0,
-      74, 0, 76, 77, 81, 0, 79, 0, 77, 76, 74, 0, 72, 0, 69, 0,
-      75, 0, 79, 0, 83, 0, 81, 0, 79, 0, 76, 0, 75, 0, 71, 0
+      74, 77, 81, 0, 86, 81, 79, 77, 74, 72, 74, 77, 81, 84, 81, 0,
+      72, 76, 79, 0, 84, 81, 79, 76, 77, 76, 74, 72, 74, 76, 79, 0,
+      70, 74, 77, 0, 82, 81, 79, 77, 74, 72, 70, 72, 74, 77, 82, 0,
+      73, 76, 81, 0, 85, 81, 79, 77, 76, 77, 79, 81, 85, 0, 81, 0
     ],
     bass: [
-      40, 40, 40, 0, 40, 40, 47, 0, 40, 40, 40, 0, 43, 0, 41, 0,
-      41, 41, 41, 0, 41, 41, 48, 0, 41, 41, 41, 0, 45, 0, 41, 0,
-      38, 38, 38, 0, 38, 38, 45, 0, 38, 38, 38, 0, 41, 0, 40, 0,
-      35, 35, 47, 0, 35, 35, 42, 0, 35, 0, 39, 0, 42, 0, 35, 0
+      38, 38, 38, 45, 38, 45, 38, 50, 38, 38, 38, 45, 41, 45, 38, 41,
+      36, 36, 36, 43, 36, 43, 36, 48, 36, 36, 36, 43, 40, 43, 36, 40,
+      34, 34, 34, 41, 34, 41, 34, 46, 34, 34, 34, 41, 38, 41, 34, 38,
+      33, 33, 45, 33, 37, 40, 45, 37, 45, 40, 37, 33, 40, 45, 49, 33
     ]
   },
   'neon-alley': {
     stageId: 'neon-alley',
-    title: 'Cyberpunk Execution Protocol',
-    genre: 'Industrial Darksynth',
-    bpm: 140,
+    title: 'Neon Velocity',
+    genre: 'Dark Industrial Synth',
+    bpm: 162,
     accentColor: '#e879f9',
+    audioUrl: '',
     bars: 4,
     instrument: 'synthwave',
     bassStyle: 'analog-16',
     drumStyle: 'synthwave',
-    // Cm -> Ab -> G -> Fm
+    // Am -> F -> G -> Em
     chords: [
-      [48, 55, 60, 63],
-      [44, 51, 56, 60],
+      [45, 52, 57, 60],
+      [41, 48, 53, 57],
       [43, 50, 55, 59],
-      [41, 48, 53, 56]
+      [40, 47, 52, 55]
     ],
     melody: [
-      72, 0, 75, 0, 79, 0, 75, 0, 77, 0, 75, 0, 74, 0, 72, 0,
-      68, 0, 72, 0, 75, 0, 79, 0, 80, 0, 79, 0, 75, 0, 72, 0,
-      74, 0, 79, 0, 83, 0, 79, 0, 77, 0, 74, 0, 71, 0, 67, 0,
-      72, 0, 75, 0, 77, 0, 80, 0, 79, 0, 77, 0, 75, 0, 72, 0
+      69, 72, 76, 81, 84, 81, 79, 76, 76, 74, 72, 74, 76, 79, 81, 0,
+      77, 81, 84, 88, 84, 81, 77, 76, 76, 72, 74, 76, 79, 76, 74, 0,
+      79, 83, 86, 91, 86, 83, 79, 76, 76, 74, 72, 71, 74, 76, 79, 0,
+      76, 79, 83, 88, 83, 81, 79, 76, 74, 72, 71, 74, 76, 79, 83, 0
     ],
     bass: [
-      36, 36, 48, 36, 36, 36, 48, 36, 36, 36, 48, 36, 36, 36, 48, 36,
-      32, 32, 44, 32, 32, 32, 44, 32, 32, 32, 44, 32, 32, 32, 44, 32,
-      31, 31, 43, 31, 31, 31, 43, 31, 31, 31, 43, 31, 31, 31, 43, 31,
-      29, 29, 41, 29, 29, 29, 41, 29, 31, 0, 35, 0, 36, 0, 34, 0
+      33, 33, 45, 33, 33, 45, 33, 45, 33, 33, 45, 33, 33, 45, 33, 40,
+      29, 29, 41, 29, 29, 41, 29, 41, 29, 29, 41, 29, 29, 41, 29, 36,
+      31, 31, 43, 31, 31, 43, 31, 43, 31, 31, 43, 31, 31, 43, 31, 38,
+      28, 28, 40, 28, 28, 40, 28, 40, 31, 35, 36, 40, 35, 33, 31, 28
     ],
     arp: [
-      60, 63, 67, 72, 67, 63, 60, 63, 56, 60, 63, 68, 63, 60, 56, 60,
-      55, 59, 62, 67, 62, 59, 55, 59, 53, 56, 60, 65, 60, 56, 53, 56
+      57, 60, 64, 69, 72, 69, 64, 60, 53, 57, 60, 65, 69, 65, 60, 57,
+      55, 59, 62, 67, 71, 67, 62, 59, 52, 55, 59, 64, 67, 64, 59, 55
     ]
   },
   'temple-dojo': {
     stageId: 'temple-dojo',
-    title: 'Bloodshed & War Taiko',
-    genre: 'War Shamisen & Taiko',
-    bpm: 142,
+    title: 'Sakura Blade',
+    genre: 'Extreme Shamisen Core',
+    bpm: 170,
     accentColor: '#f472b6',
+    audioUrl: '',
     bars: 4,
     instrument: 'shamisen',
     bassStyle: 'taiko-drone',
     drumStyle: 'taiko',
-    // E Hirajoshi: E, F, A, B, C
+    // D Hirajoshi
     chords: [
-      [52, 59, 64, 65],
-      [48, 55, 60, 64],
+      [50, 57, 62, 65],
+      [46, 53, 58, 62],
       [45, 52, 57, 60],
-      [47, 53, 59, 64]
+      [48, 55, 60, 64]
     ],
     melody: [
-      76, 77, 81, 0, 83, 81, 77, 76, 0, 72, 76, 77, 81, 0, 76, 0,
-      72, 76, 77, 0, 81, 0, 84, 83, 81, 77, 76, 0, 72, 71, 69, 0,
-      69, 71, 72, 76, 0, 77, 81, 0, 83, 84, 83, 81, 77, 0, 76, 0,
-      71, 72, 76, 77, 83, 0, 81, 77, 76, 0, 72, 0, 71, 0, 64, 0
+      74, 76, 77, 81, 82, 81, 77, 76, 74, 70, 74, 76, 77, 81, 86, 0,
+      82, 81, 77, 81, 82, 86, 89, 0, 86, 82, 81, 77, 76, 74, 70, 0,
+      69, 70, 74, 76, 77, 81, 82, 86, 82, 86, 89, 86, 82, 81, 77, 76,
+      74, 77, 81, 86, 89, 86, 81, 77, 76, 74, 77, 81, 86, 81, 77, 74
     ],
     bass: [
-      40, 0, 40, 40, 40, 0, 47, 0, 40, 0, 40, 40, 41, 0, 40, 0,
-      36, 0, 36, 36, 36, 0, 43, 0, 36, 0, 36, 36, 40, 0, 36, 0,
-      33, 0, 33, 33, 33, 0, 40, 0, 33, 0, 33, 33, 36, 0, 33, 0,
-      35, 0, 35, 35, 41, 0, 35, 0, 35, 0, 40, 0, 47, 0, 40, 0
+      38, 38, 38, 45, 38, 38, 45, 38, 38, 38, 38, 41, 45, 41, 38, 45,
+      34, 34, 34, 41, 34, 34, 41, 34, 34, 34, 34, 38, 41, 38, 34, 41,
+      33, 33, 33, 40, 33, 33, 40, 33, 33, 33, 33, 38, 40, 38, 33, 40,
+      36, 36, 36, 43, 36, 43, 36, 48, 36, 41, 45, 41, 38, 36, 38, 45
     ]
   },
   'volcano-arena': {
     stageId: 'volcano-arena',
-    title: 'Magma Execution Fury',
-    genre: 'Thrash Boss Metal',
-    bpm: 158,
+    title: 'Magma Gauntlet',
+    genre: 'Extreme Thrash Deathmatch',
+    bpm: 186,
     accentColor: '#ef4444',
+    audioUrl: '',
     bars: 4,
     instrument: 'metal-shred',
     bassStyle: 'chug',
     drumStyle: 'thrash',
-    // D Phrygian Dominant: D - Eb - F# - G - A - Bb - C
+    // E Phrygian Dominant
     chords: [
-      [38, 45, 50, 54],
-      [39, 46, 51, 55],
-      [42, 49, 54, 57],
-      [43, 50, 55, 58]
+      [40, 47, 52, 56],
+      [41, 48, 53, 57],
+      [44, 51, 56, 59],
+      [45, 52, 57, 60]
     ],
     melody: [
-      74, 0, 75, 74, 78, 0, 79, 0, 81, 0, 79, 78, 75, 0, 74, 0,
-      75, 0, 78, 79, 82, 0, 81, 0, 79, 78, 75, 0, 74, 70, 69, 0,
-      74, 75, 78, 79, 81, 82, 86, 0, 82, 81, 79, 78, 75, 74, 72, 0,
-      78, 0, 81, 0, 82, 0, 86, 0, 81, 0, 78, 0, 75, 0, 74, 0
+      76, 77, 80, 81, 83, 81, 80, 77, 76, 77, 80, 83, 88, 84, 83, 80,
+      77, 80, 81, 84, 88, 84, 83, 81, 80, 77, 76, 72, 76, 80, 83, 0,
+      76, 77, 80, 81, 83, 84, 88, 89, 88, 84, 83, 81, 80, 77, 76, 74,
+      80, 83, 84, 88, 89, 88, 84, 83, 81, 80, 77, 76, 74, 76, 80, 0
     ],
     bass: [
-      38, 38, 38, 38, 39, 38, 38, 38, 42, 38, 38, 38, 43, 0, 39, 0,
-      38, 38, 38, 38, 39, 38, 38, 38, 46, 0, 45, 0, 43, 0, 39, 0,
-      38, 38, 38, 38, 42, 38, 38, 38, 43, 38, 38, 38, 46, 0, 45, 0,
-      39, 39, 42, 42, 43, 43, 46, 46, 45, 0, 43, 0, 39, 0, 38, 0
+      40, 40, 40, 40, 41, 40, 40, 40, 44, 40, 40, 40, 45, 41, 40, 41,
+      40, 40, 40, 40, 41, 40, 40, 40, 48, 47, 45, 41, 40, 41, 44, 41,
+      40, 40, 40, 40, 44, 40, 40, 40, 45, 40, 40, 40, 48, 47, 45, 44,
+      41, 41, 44, 44, 45, 45, 48, 48, 47, 45, 44, 41, 40, 40, 41, 40
     ]
   },
   'space-station': {
     stageId: 'space-station',
-    title: 'Orbital Annihilation',
-    genre: 'Dark Psy-Battle Trance',
-    bpm: 144,
+    title: 'Orbital Overdrive',
+    genre: 'Hyper Psy-Trance Shred',
+    bpm: 172,
     accentColor: '#22d3ee',
+    audioUrl: '',
     bars: 4,
     instrument: 'trance-chip',
     bassStyle: 'psy-roll',
     drumStyle: 'trance',
-    // F#m -> D -> E -> C#m
+    // Gm -> Eb -> F -> Dm
     chords: [
-      [54, 61, 66, 69],
-      [50, 57, 62, 66],
-      [52, 59, 64, 68],
-      [49, 56, 61, 64]
+      [55, 62, 67, 70],
+      [51, 58, 63, 67],
+      [53, 60, 65, 69],
+      [50, 57, 62, 65]
     ],
     melody: [
-      78, 0, 81, 0, 85, 0, 81, 0, 83, 0, 81, 0, 78, 0, 76, 0,
-      74, 0, 78, 0, 81, 0, 86, 0, 85, 0, 81, 0, 78, 0, 74, 0,
-      76, 0, 80, 0, 83, 0, 88, 0, 86, 0, 85, 0, 83, 0, 80, 0,
-      73, 0, 76, 0, 80, 0, 85, 0, 83, 0, 80, 0, 76, 0, 73, 0
+      79, 82, 86, 82, 91, 86, 82, 79, 84, 82, 79, 77, 79, 82, 86, 0,
+      75, 79, 82, 87, 91, 87, 82, 79, 86, 82, 79, 75, 79, 82, 87, 0,
+      77, 81, 84, 89, 93, 89, 84, 81, 87, 86, 84, 81, 84, 86, 89, 0,
+      74, 77, 81, 86, 89, 86, 81, 77, 84, 81, 77, 74, 77, 81, 86, 0
     ],
     bass: [
-      42, 42, 54, 42, 42, 42, 54, 42, 42, 42, 54, 42, 42, 42, 54, 42,
-      38, 38, 50, 38, 38, 38, 50, 38, 38, 38, 50, 38, 38, 38, 50, 38,
-      40, 40, 52, 40, 40, 40, 52, 40, 40, 40, 52, 40, 40, 40, 52, 40,
-      37, 37, 49, 37, 37, 37, 49, 37, 37, 37, 49, 37, 40, 0, 44, 0
+      43, 43, 55, 43, 43, 43, 55, 43, 43, 43, 55, 43, 43, 55, 43, 55,
+      39, 39, 51, 39, 39, 39, 51, 39, 39, 39, 51, 39, 39, 51, 39, 51,
+      41, 41, 53, 41, 41, 41, 53, 41, 41, 41, 53, 41, 41, 53, 41, 53,
+      38, 38, 50, 38, 38, 38, 50, 38, 38, 41, 45, 50, 45, 41, 38, 45
     ],
     arp: [
-      66, 69, 73, 78, 73, 69, 66, 69, 62, 66, 69, 74, 69, 66, 62, 66,
-      64, 68, 71, 76, 71, 68, 64, 68, 61, 64, 68, 73, 68, 64, 61, 64
+      67, 70, 74, 79, 82, 79, 74, 70, 63, 67, 70, 75, 79, 75, 70, 67,
+      65, 69, 72, 77, 81, 77, 72, 69, 62, 65, 69, 74, 77, 74, 69, 65
+    ]
+  },
+  'glacier-fortress': {
+    stageId: 'glacier-fortress',
+    title: 'Aurora Shatter',
+    genre: 'Arctic Hyper Rave',
+    bpm: 164,
+    accentColor: '#34d399',
+    audioUrl: '',
+    bars: 4,
+    instrument: 'trance-chip',
+    bassStyle: 'analog-16',
+    drumStyle: 'trance',
+    // Bm -> G -> A -> F#7
+    chords: [
+      [47, 54, 59, 62],
+      [43, 50, 55, 59],
+      [45, 52, 57, 61],
+      [42, 49, 54, 58]
+    ],
+    melody: [
+      71, 74, 78, 83, 86, 83, 81, 78, 78, 76, 74, 78, 83, 86, 83, 0,
+      79, 83, 86, 91, 86, 83, 79, 78, 78, 74, 76, 78, 83, 79, 78, 0,
+      81, 85, 88, 93, 88, 85, 81, 78, 78, 76, 74, 73, 76, 78, 81, 0,
+      78, 82, 85, 90, 85, 83, 81, 78, 76, 74, 73, 78, 82, 85, 90, 0
+    ],
+    bass: [
+      35, 35, 47, 35, 35, 47, 35, 47, 35, 35, 47, 35, 35, 47, 35, 42,
+      31, 31, 43, 31, 31, 43, 31, 43, 31, 31, 43, 31, 31, 43, 31, 38,
+      33, 33, 45, 33, 33, 45, 33, 45, 33, 33, 45, 33, 33, 45, 33, 40,
+      30, 30, 42, 30, 30, 42, 30, 42, 34, 37, 42, 46, 42, 37, 34, 30
+    ],
+    arp: [
+      59, 62, 66, 71, 74, 71, 66, 62, 55, 59, 62, 67, 71, 67, 62, 59,
+      57, 61, 64, 69, 73, 69, 64, 61, 54, 58, 61, 66, 70, 66, 61, 58
+    ]
+  },
+  'thunder-colosseum': {
+    stageId: 'thunder-colosseum',
+    title: 'Colosseum Fury',
+    genre: 'Gladiator Power Metal',
+    bpm: 178,
+    accentColor: '#c084fc',
+    audioUrl: '',
+    bars: 4,
+    instrument: 'war-brass',
+    bassStyle: 'chug',
+    drumStyle: 'battle',
+    // C#m -> A -> B -> G#7
+    chords: [
+      [49, 56, 61, 64],
+      [45, 52, 57, 61],
+      [47, 54, 59, 63],
+      [44, 51, 56, 60]
+    ],
+    melody: [
+      73, 76, 80, 85, 88, 85, 83, 80, 76, 78, 80, 83, 85, 83, 80, 0,
+      81, 85, 88, 92, 88, 85, 83, 81, 80, 78, 76, 73, 76, 80, 85, 0,
+      78, 83, 87, 90, 87, 83, 80, 78, 76, 75, 73, 71, 75, 78, 83, 0,
+      76, 80, 84, 88, 92, 88, 84, 80, 84, 83, 80, 76, 80, 84, 88, 0
+    ],
+    bass: [
+      37, 37, 37, 44, 37, 44, 37, 49, 37, 37, 37, 44, 40, 44, 37, 40,
+      33, 33, 33, 40, 33, 40, 33, 45, 33, 33, 33, 40, 37, 40, 33, 37,
+      35, 35, 35, 42, 35, 42, 35, 47, 35, 35, 35, 42, 39, 42, 35, 39,
+      32, 32, 44, 32, 36, 39, 44, 36, 44, 39, 36, 32, 39, 44, 48, 32
+    ]
+  },
+  'shadow-shrine': {
+    stageId: 'shadow-shrine',
+    title: 'Blood Moon Torii',
+    genre: 'Demon Shinobi Metal',
+    bpm: 160,
+    accentColor: '#f43f5e',
+    audioUrl: '',
+    bars: 4,
+    instrument: 'shamisen',
+    bassStyle: 'taiko-drone',
+    drumStyle: 'taiko',
+    // C In-sen
+    chords: [
+      [48, 55, 60, 61],
+      [44, 51, 56, 60],
+      [41, 48, 53, 55],
+      [46, 53, 58, 60]
+    ],
+    melody: [
+      72, 73, 77, 79, 84, 79, 77, 73, 72, 70, 72, 73, 77, 79, 84, 0,
+      79, 80, 84, 85, 89, 85, 84, 80, 79, 77, 73, 72, 73, 77, 79, 0,
+      70, 72, 73, 77, 79, 82, 84, 85, 84, 82, 79, 77, 79, 82, 84, 0,
+      73, 77, 79, 84, 85, 84, 82, 79, 77, 73, 72, 70, 72, 73, 77, 0
+    ],
+    bass: [
+      36, 36, 36, 43, 36, 36, 43, 36, 36, 36, 36, 37, 43, 37, 36, 43,
+      32, 32, 32, 39, 32, 32, 39, 32, 32, 32, 32, 36, 39, 36, 32, 39,
+      29, 29, 29, 36, 29, 29, 36, 29, 29, 29, 29, 34, 36, 34, 29, 36,
+      34, 34, 34, 41, 34, 41, 34, 46, 34, 39, 43, 39, 37, 36, 34, 43
     ]
   }
 };
@@ -237,6 +341,8 @@ export function getStageMusicTheme(stageId: string): StageMusicTheme {
 let musicAudioCtx: AudioContext | null = null;
 let musicMasterGain: GainNode | null = null;
 let currentSource: AudioBufferSourceNode | null = null;
+let activeHtmlAudio: HTMLAudioElement | null = null;
+let pendingAudioRetry: (() => void) | null = null;
 let currentStageId: string | null = null;
 let currentRequestToken = 0;
 let currentSettings: GameSettings = { ...DEFAULT_SETTINGS };
@@ -284,15 +390,41 @@ function attachUnlockListeners(): void {
   window.addEventListener('keydown', resume, { passive: true });
 }
 
+function clearPendingAudioRetry(): void {
+  if (pendingAudioRetry && typeof window !== 'undefined') {
+    window.removeEventListener('pointerdown', pendingAudioRetry);
+    window.removeEventListener('keydown', pendingAudioRetry);
+  }
+  pendingAudioRetry = null;
+}
+
+let musicDucked = false;
+
 function computeMusicGain(settings: GameSettings): number {
   if (settings.muted) {
     return 0;
   }
-  return Math.max(0, Math.min(0.65, settings.musicVolume * 0.42));
+  const base = Math.max(0, Math.min(0.75, settings.musicVolume * 0.5));
+  return musicDucked ? base * 0.22 : base;
+}
+
+function computeHtmlAudioVolume(settings: GameSettings): number {
+  if (settings.muted) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, settings.musicVolume * 0.72));
+}
+
+export function setStageMusicDucked(ducked: boolean): void {
+  musicDucked = ducked;
+  updateStageMusicSettings(currentSettings);
 }
 
 export function updateStageMusicSettings(settings: GameSettings): void {
   currentSettings = settings;
+  if (activeHtmlAudio) {
+    activeHtmlAudio.volume = computeHtmlAudioVolume(settings);
+  }
   if (!musicAudioCtx || !musicMasterGain) {
     return;
   }
@@ -303,6 +435,16 @@ export function updateStageMusicSettings(settings: GameSettings): void {
 export function stopStageMusic(): void {
   currentRequestToken += 1;
   currentStageId = null;
+  clearPendingAudioRetry();
+  if (activeHtmlAudio) {
+    try {
+      activeHtmlAudio.pause();
+      activeHtmlAudio.src = '';
+    } catch {
+      // Ignore cleanup errors.
+    }
+    activeHtmlAudio = null;
+  }
   if (currentSource) {
     try {
       currentSource.stop();
@@ -318,7 +460,7 @@ export function startStageMusic(stageId: string, settings: GameSettings): StageM
   const arrangement = STAGE_TRACKS[stageId] ?? STAGE_TRACKS['storm-citadel'];
   updateStageMusicSettings(settings);
 
-  if (currentStageId === arrangement.stageId && currentSource) {
+  if (currentStageId === arrangement.stageId && (activeHtmlAudio || currentSource)) {
     return getStageMusicTheme(arrangement.stageId);
   }
 
@@ -326,9 +468,14 @@ export function startStageMusic(stageId: string, settings: GameSettings): StageM
   currentStageId = arrangement.stageId;
   const token = ++currentRequestToken;
 
+  startProceduralFallback(arrangement, token);
+  return getStageMusicTheme(arrangement.stageId);
+}
+
+function startProceduralFallback(arrangement: InternalTrackArrangement, token: number): void {
   const ctx = ensureAudioContext();
   if (!ctx || !musicMasterGain) {
-    return getStageMusicTheme(arrangement.stageId);
+    return;
   }
 
   void getOrRenderTrackBuffer(ctx, arrangement).then((buffer) => {
@@ -343,8 +490,6 @@ export function startStageMusic(stageId: string, settings: GameSettings): StageM
     source.start(musicAudioCtx.currentTime + 0.02);
     currentSource = source;
   });
-
-  return getStageMusicTheme(arrangement.stageId);
 }
 
 async function getOrRenderTrackBuffer(
@@ -368,17 +513,27 @@ async function getOrRenderTrackBuffer(
 
   const offline = new OfflineAudioContext(2, frameCount, sampleRate);
   const mixBus = offline.createGain();
-  mixBus.gain.setValueAtTime(0.82, 0);
+  mixBus.gain.setValueAtTime(0.95, 0);
 
-  // Warm master compressor so punches & chords sit cohesively without clipping
+  // Extreme tube-style overdrive shaper + heavy limiter/compressor for punchy boss energy
+  const satCurve = new Float32Array(new ArrayBuffer(256 * 4));
+  for (let i = 0; i < 256; i += 1) {
+    const x = (i * 2) / 256 - 1;
+    satCurve[i] = Math.tanh(x * 1.65);
+  }
+  const saturator = offline.createWaveShaper();
+  saturator.curve = satCurve;
+  saturator.oversample = '2x';
+
   const compressor = offline.createDynamicsCompressor();
-  compressor.threshold.setValueAtTime(-14, 0);
-  compressor.knee.setValueAtTime(12, 0);
-  compressor.ratio.setValueAtTime(4, 0);
-  compressor.attack.setValueAtTime(0.004, 0);
-  compressor.release.setValueAtTime(0.16, 0);
+  compressor.threshold.setValueAtTime(-18, 0);
+  compressor.knee.setValueAtTime(10, 0);
+  compressor.ratio.setValueAtTime(6, 0);
+  compressor.attack.setValueAtTime(0.002, 0);
+  compressor.release.setValueAtTime(0.11, 0);
 
-  mixBus.connect(compressor);
+  mixBus.connect(saturator);
+  saturator.connect(compressor);
   compressor.connect(offline.destination);
 
   const noiseBuf = createWhiteNoiseBuffer(offline);
@@ -601,27 +756,35 @@ function playRockLead(
   dur: number,
   heavy: boolean
 ): void {
-  [-7, 7].forEach((detuneCents, idx) => {
+  // Power-chord fifth harmony + detuned dual guitar shred
+  const pairs: Array<{ ratio: number; detune: number; pan: number }> = [
+    { ratio: 1, detune: -9, pan: -0.35 },
+    { ratio: 1, detune: 9, pan: 0.35 },
+    { ratio: 1.498, detune: 0, pan: 0 }
+  ];
+
+  pairs.forEach(({ ratio, detune, pan: panVal }) => {
     const osc = ctx.createOscillator();
     const filter = ctx.createBiquadFilter();
     const gain = ctx.createGain();
     const pan = ctx.createStereoPanner();
 
-    osc.type = heavy ? 'sawtooth' : 'square';
-    osc.frequency.setValueAtTime(freq, startAt);
-    osc.detune.setValueAtTime(detuneCents, startAt);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(freq * ratio, startAt);
+    osc.detune.setValueAtTime(detune, startAt);
 
     filter.type = 'lowpass';
-    filter.Q.setValueAtTime(heavy ? 3.2 : 1.8, startAt);
-    filter.frequency.setValueAtTime(heavy ? 3200 : 2800, startAt);
-    filter.frequency.exponentialRampToValueAtTime(950, startAt + dur);
+    filter.Q.setValueAtTime(heavy ? 3.8 : 2.6, startAt);
+    filter.frequency.setValueAtTime(heavy ? 4200 : 3600, startAt);
+    filter.frequency.exponentialRampToValueAtTime(1150, startAt + dur);
 
+    const amp = ratio > 1 ? 0.042 : heavy ? 0.098 : 0.088;
     gain.gain.setValueAtTime(0.0001, startAt);
-    gain.gain.linearRampToValueAtTime(heavy ? 0.095 : 0.085, startAt + 0.015);
-    gain.gain.setValueAtTime(heavy ? 0.075 : 0.068, startAt + dur * 0.72);
+    gain.gain.linearRampToValueAtTime(amp, startAt + 0.01);
+    gain.gain.setValueAtTime(amp * 0.82, startAt + dur * 0.72);
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
 
-    pan.pan.setValueAtTime(idx === 0 ? -0.25 : 0.25, startAt);
+    pan.pan.setValueAtTime(panVal, startAt);
 
     osc.connect(filter);
     filter.connect(gain);
@@ -829,78 +992,87 @@ function renderDrums(
 
     switch (arrangement.drumStyle) {
       case 'rock':
-        if (stepInBar === 0 || stepInBar === 6 || stepInBar === 8 || stepInBar === 10) {
-          triggerKick(ctx, dest, startAt, 0.34, 150, 44);
+        if (stepInBar % 2 === 0 && (stepInBar < 8 || stepInBar === 10 || stepInBar === 14)) {
+          triggerKick(ctx, dest, startAt, 0.38, 165, 42);
         }
         if (stepInBar === 4 || stepInBar === 12) {
-          triggerSnare(ctx, dest, noiseBuf, startAt, 0.24, 0.14);
+          triggerSnare(ctx, dest, noiseBuf, startAt, 0.3, 0.14);
         }
-        if (stepInBar % 2 === 0) {
-          triggerHat(ctx, dest, noiseBuf, startAt, stepInBar % 4 === 2 ? 0.08 : 0.045, 0.045);
+        if (stepInBar === 0) {
+          triggerAnvil(ctx, dest, startAt, 0.12);
         }
+        triggerHat(ctx, dest, noiseBuf, startAt, stepInBar % 2 === 0 ? 0.085 : 0.045, 0.04);
         break;
 
       case 'battle':
-        // Double-kick battleground drive + heavy snare & crash accents
-        if (stepInBar === 0 || stepInBar === 2 || stepInBar === 6 || stepInBar === 8 || stepInBar === 10) {
-          triggerKick(ctx, dest, startAt, 0.36, 155, 42);
+        // Relentless double-kick assault + heavy snare & steel crash accents
+        if (stepInBar % 2 === 0) {
+          triggerKick(ctx, dest, startAt, stepInBar % 4 === 0 ? 0.4 : 0.26, 170, 40);
         }
-        if (stepInBar === 4 || stepInBar === 12) {
-          triggerSnare(ctx, dest, noiseBuf, startAt, 0.27, 0.14);
+        if (stepInBar === 4 || stepInBar === 12 || stepInBar === 15) {
+          triggerSnare(ctx, dest, noiseBuf, startAt, stepInBar === 15 ? 0.2 : 0.31, 0.14);
         }
-        if (stepInBar === 0) {
-          triggerAnvil(ctx, dest, startAt, 0.1);
+        if (stepInBar === 0 || stepInBar === 8) {
+          triggerAnvil(ctx, dest, startAt, 0.13);
         }
-        triggerHat(ctx, dest, noiseBuf, startAt, stepInBar % 2 === 0 ? 0.065 : 0.032, 0.036);
+        triggerHat(ctx, dest, noiseBuf, startAt, stepInBar % 2 === 0 ? 0.08 : 0.042, 0.036);
         break;
 
       case 'synthwave':
-        if (stepInBar % 4 === 0) {
-          triggerKick(ctx, dest, startAt, 0.36, 145, 42);
+        if (stepInBar % 4 === 0 || stepInBar === 14) {
+          triggerKick(ctx, dest, startAt, 0.42, 160, 40);
         }
         if (stepInBar === 4 || stepInBar === 12) {
-          triggerSnare(ctx, dest, noiseBuf, startAt, 0.26, 0.18);
+          triggerSnare(ctx, dest, noiseBuf, startAt, 0.32, 0.19);
         }
-        if (stepInBar % 4 === 2) {
-          triggerHat(ctx, dest, noiseBuf, startAt, 0.085, 0.075);
+        if (stepInBar === 0) {
+          triggerAnvil(ctx, dest, startAt, 0.09);
         }
+        triggerHat(ctx, dest, noiseBuf, startAt, stepInBar % 4 === 2 ? 0.1 : 0.045, 0.06);
         break;
 
       case 'taiko':
-        // Booming taiko beats + sharp wooden clack accents
-        if (stepInBar === 0 || stepInBar === 6 || stepInBar === 8 || stepInBar === 14) {
-          triggerKick(ctx, dest, startAt, 0.38, 108, 46);
+        // Thundering war-taiko double-hits + steel blade clashes
+        if (stepInBar === 0 || stepInBar === 2 || stepInBar === 6 || stepInBar === 8 || stepInBar === 10 || stepInBar === 14) {
+          triggerKick(ctx, dest, startAt, 0.42, 122, 42);
         }
         if (stepInBar === 4 || stepInBar === 12) {
-          triggerWoodblock(ctx, dest, startAt, 940, 0.18);
+          triggerSnare(ctx, dest, noiseBuf, startAt, 0.26, 0.12);
+          triggerWoodblock(ctx, dest, startAt, 980, 0.2);
+        }
+        if (stepInBar === 0) {
+          triggerAnvil(ctx, dest, startAt, 0.11);
         }
         if (stepInBar === 10 || stepInBar === 15) {
-          triggerWoodblock(ctx, dest, startAt, 1280, 0.11);
+          triggerWoodblock(ctx, dest, startAt, 1340, 0.13);
         }
         break;
 
       case 'thrash':
-        // Double-kick metal assault + anvil crash on downbeat
-        if (stepInBar % 2 === 0) {
-          triggerKick(ctx, dest, startAt, stepInBar % 4 === 0 ? 0.34 : 0.22, 165, 42);
+        // Nonstop 16th-note double-kick thrash + anvil crashes
+        if (stepInBar % 2 === 0 || stepInBar === 15) {
+          triggerKick(ctx, dest, startAt, stepInBar % 4 === 0 ? 0.42 : 0.28, 178, 38);
         }
         if (stepInBar === 4 || stepInBar === 12) {
-          triggerSnare(ctx, dest, noiseBuf, startAt, 0.28, 0.15);
+          triggerSnare(ctx, dest, noiseBuf, startAt, 0.34, 0.15);
         }
-        if (stepInBar === 0) {
-          triggerAnvil(ctx, dest, startAt, 0.14);
+        if (stepInBar === 0 || stepInBar === 8) {
+          triggerAnvil(ctx, dest, startAt, 0.16);
         }
-        triggerHat(ctx, dest, noiseBuf, startAt, 0.055, 0.038);
+        triggerHat(ctx, dest, noiseBuf, startAt, 0.075, 0.038);
         break;
 
       case 'trance':
-        if (stepInBar % 4 === 0) {
-          triggerKick(ctx, dest, startAt, 0.35, 160, 44);
+        if (stepInBar % 4 === 0 || stepInBar === 14) {
+          triggerKick(ctx, dest, startAt, 0.4, 172, 42);
         }
         if (stepInBar === 4 || stepInBar === 12) {
-          triggerSnare(ctx, dest, noiseBuf, startAt, 0.22, 0.12);
+          triggerSnare(ctx, dest, noiseBuf, startAt, 0.28, 0.12);
         }
-        triggerHat(ctx, dest, noiseBuf, startAt, stepInBar % 4 === 2 ? 0.095 : 0.038, stepInBar % 4 === 2 ? 0.08 : 0.03);
+        if (stepInBar === 0) {
+          triggerAnvil(ctx, dest, startAt, 0.1);
+        }
+        triggerHat(ctx, dest, noiseBuf, startAt, stepInBar % 4 === 2 ? 0.11 : 0.05, stepInBar % 4 === 2 ? 0.075 : 0.03);
         break;
     }
   }

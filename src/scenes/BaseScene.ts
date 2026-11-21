@@ -48,6 +48,34 @@ export abstract class BaseScene extends Phaser.Scene {
       .setDepth(100);
   }
 
+  protected createMenuButton(
+    x = 24,
+    y = 30,
+    label = '← MENU'
+  ): Phaser.GameObjects.Text {
+    const button = this.add
+      .text(x, y, label, {
+        color: '#e2e8f0',
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+        padding: { x: 14, y: 8 },
+        stroke: '#334155',
+        strokeThickness: 2
+      })
+      .setOrigin(0, 0.5)
+      .setDepth(120)
+      .setScrollFactor(0)
+      .setInteractive({ useHandCursor: true });
+
+    button.on('pointerover', () => button.setColor('#facc15'));
+    button.on('pointerout', () => button.setColor('#e2e8f0'));
+    button.on('pointerdown', () => this.goToMenu());
+
+    return button;
+  }
+
   protected goToMenu(): void {
     this.scene.start(SCENE_KEYS.MainMenu);
   }

@@ -20,11 +20,13 @@ export class BootScene extends BaseScene {
     this.cameras.main.setBackgroundColor(0x020617);
 
     this.add
-      .text(centerX, centerY - 42, 'VIBE FIGHTER', {
+      .text(centerX, centerY - 42, 'STREET FIGHTER', {
         color: '#facc15',
         fontFamily: 'monospace',
-        fontSize: '30px',
-        fontStyle: 'bold'
+        fontSize: '34px',
+        fontStyle: 'bold',
+        stroke: '#7f1d1d',
+        strokeThickness: 6
       })
       .setOrigin(0.5);
 
@@ -125,6 +127,9 @@ function cleanRedBrawlerTextures(scene: Phaser.Scene): void {
     const tex = scene.textures.get('red-brawler-special');
     const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
     if (src.width > 0 && src.height > 0) {
+      const cols = Math.max(1, Math.floor(src.width / 256));
+      const rows = Math.max(1, Math.floor(src.height / 256));
+      const totalFrames = Math.max(1, tex.frameTotal > 1 ? tex.frameTotal - 1 : cols * rows);
       const canvas = document.createElement('canvas');
       canvas.width = src.width;
       canvas.height = src.height;
@@ -138,11 +143,9 @@ function cleanRedBrawlerTextures(scene: Phaser.Scene): void {
           const r = d[i];
           const g = d[i + 1];
           const b = d[i + 2];
-          if (g > 140 && g - Math.max(r, b) > 55) {
-            d[i + 3] = 0;
-          } else if (g > Math.max(r, b) + 18) {
+          if (g > Math.max(r, b) + 18) {
             const cap = Math.max(r, b);
-            d[i + 1] = Math.round(cap + (g - cap) * 0.12);
+            d[i + 1] = Math.round(cap + (g - cap) * 0.14);
           }
         }
         ctx.putImageData(imgData, 0, 0);
@@ -151,7 +154,7 @@ function cleanRedBrawlerTextures(scene: Phaser.Scene): void {
           frameWidth: 256,
           frameHeight: 256,
           startFrame: 0,
-          endFrame: 7
+          endFrame: totalFrames - 1
         });
       }
     }

@@ -9,7 +9,7 @@ import { getSpecialCooldownSeconds, getSpecialMoveSpec, SPECIAL_MOVE_SPECS } fro
 import { STAGE_DEFINITIONS } from './stageConfig';
 
 describe('crossover roster, special moves, and hidden secret moves', () => {
-  it('registers 100 total fighters (96 crossover fighters, 3 starters, and custom Hero)', () => {
+  it('registers 32 total fighters (28 crossover fighters, 3 starters, and custom Hero) without Sonic', () => {
     const ids = new Set(FIGHTER_CHARACTER_DEFINITIONS.map((c) => c.id));
     for (const profile of CROSSOVER_PROFILES) {
       expect(ids.has(profile.id)).toBe(true);
@@ -33,14 +33,15 @@ describe('crossover roster, special moves, and hidden secret moves', () => {
       expect(ids.has(rivalId)).toBe(true);
     }
 
+    expect(ids.has('sonic')).toBe(false);
     expect(ids.has('hero')).toBe(true);
     expect(ids.has('erkhembayar')).toBe(true);
     expect(ids.has('bayasaa')).toBe(false);
     expect(ids.has('red-brawler')).toBe(true);
     expect(ids.has('jiujitsu-fighter')).toBe(true);
     expect(ids.has('green-boxer')).toBe(true);
-    expect(CROSSOVER_PROFILES.length).toBe(96);
-    expect(ids.size).toBe(100);
+    expect(CROSSOVER_PROFILES.length).toBe(28);
+    expect(ids.size).toBe(32);
   });
 
   it('gives every registered fighter a high maxHealth pool so matches last longer', () => {
@@ -66,7 +67,7 @@ describe('crossover roster, special moves, and hidden secret moves', () => {
     }
 
     expect(archetypes.size).toBeGreaterThanOrEqual(10);
-    expect(Object.keys(SPECIAL_MOVE_SPECS).length).toBe(100);
+    expect(Object.keys(SPECIAL_MOVE_SPECS).length).toBe(32);
     expect(moveNames.size).toBe(Object.keys(SPECIAL_MOVE_SPECS).length);
   });
 
@@ -82,7 +83,7 @@ describe('crossover roster, special moves, and hidden secret moves', () => {
       expect(secret.damage).toBeGreaterThan(0);
     }
 
-    expect(Object.keys(SECRET_MOVE_SPECS).length).toBe(100);
+    expect(Object.keys(SECRET_MOVE_SPECS).length).toBe(32);
   });
 
   it('scales special and secret move cooldowns directly by move strength', () => {
@@ -103,11 +104,14 @@ describe('crossover roster, special moves, and hidden secret moves', () => {
     }
   });
 
-  it('replaces rooftop-twilight with storm-citadel and assigns unique music to every stage', () => {
+  it('assigns all 9 stages including storm-citadel and unique music per stage', () => {
     const stageIds = STAGE_DEFINITIONS.map((stage) => stage.id);
     expect(stageIds).not.toContain('rooftop-twilight');
     expect(stageIds).toContain('storm-citadel');
-    expect(stageIds).toHaveLength(6);
+    expect(stageIds).toContain('glacier-fortress');
+    expect(stageIds).toContain('thunder-colosseum');
+    expect(stageIds).toContain('shadow-shrine');
+    expect(stageIds).toHaveLength(9);
 
     const trackTitles = new Set<string>();
     const bpms = new Set<number>();

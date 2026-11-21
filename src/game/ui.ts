@@ -3,6 +3,7 @@ import * as Phaser from 'phaser';
 export interface TextButton {
   group: Phaser.GameObjects.Container;
   setSelected(selected: boolean): void;
+  setLabel(text: string): void;
   destroy(): void;
 }
 
@@ -47,6 +48,9 @@ export function createTextButton(scene: Phaser.Scene, config: TextButtonConfig):
   return {
     group,
     setSelected,
+    setLabel: (text: string) => {
+      label.setText(text);
+    },
     destroy: () => {
       group.destroy(true);
     }
@@ -73,6 +77,8 @@ export interface SelectionCardConfig {
   imageMaxSize?: number;
   /** Vertical offset of the image centre from the card centre. */
   imageOffsetY?: number;
+  /** Optional font size override for card title. */
+  titleFontSize?: string;
   onClick?: () => void;
   onHover?: () => void;
 }
@@ -109,7 +115,7 @@ export function createSelectionCard(scene: Phaser.Scene, config: SelectionCardCo
     .text(0, titleY, config.title, {
       color: '#f8fafc',
       fontFamily: 'monospace',
-      fontSize: '20px',
+      fontSize: config.titleFontSize ?? '20px',
       align: 'center'
     })
     .setOrigin(0.5);

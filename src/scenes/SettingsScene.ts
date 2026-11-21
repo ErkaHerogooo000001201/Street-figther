@@ -41,6 +41,7 @@ export class SettingsScene extends BaseScene {
     this.markActiveScene(SCENE_KEYS.Settings);
     this.cameras.main.setBackgroundColor(0x020617);
     this.createHeading('Settings', '');
+    this.createMenuButton(24, 30);
 
     const centerX = this.cameras.main.centerX;
     const camera = this.cameras.main;
@@ -152,6 +153,7 @@ export class SettingsScene extends BaseScene {
     this.input.keyboard?.on('keydown-LEFT', () => this.handleLeft());
     this.input.keyboard?.on('keydown-RIGHT', () => this.handleRight());
     this.input.keyboard?.on('keydown-ESC', () => this.goToMenu());
+    this.input.keyboard?.on('keydown-BACKSPACE', () => this.goToMenu());
     this.input.keyboard?.on('keydown-ENTER', () => this.activateSelection());
     this.input.keyboard?.on('keydown-SPACE', () => this.activateSelection());
 

@@ -3,6 +3,9 @@ import stageNeonAlleyUrl from '../assets/images/stage_neon_alley_1794712257696.j
 import stageTempleDojoUrl from '../assets/images/stage_temple_dojo_1794712258879.jpg';
 import stageVolcanoArenaUrl from '../assets/images/stage_volcano_arena_1794712258502.jpg';
 import stageSpaceStationUrl from '../assets/images/stage_space_station_1794712259947.jpg';
+import stageGlacierFortressUrl from '../assets/images/stage_glacier_fortress_1795234486546.jpg';
+import stageThunderColosseumUrl from '../assets/images/stage_thunder_colosseum_1795234485909.jpg';
+import stageShadowShrineUrl from '../assets/images/stage_shadow_shrine_1795234485976.jpg';
 
 import sheetGokuUrl from '../assets/images/sheet_goku_1794712259751.jpg';
 import sheetVegetaUrl from '../assets/images/sheet_vegeta_1794712815621.jpg';
@@ -37,7 +40,6 @@ import sheetCloudUrl from '../assets/images/sheet_cloud_1794712272123.jpg';
 import sheetDanteUrl from '../assets/images/sheet_dante_1794712271985.jpg';
 import sheetLinkUrl from '../assets/images/sheet_link_1794712273792.jpg';
 import sheetMegamanUrl from '../assets/images/sheet_megaman_1794712275323.jpg';
-import sheetSonicUrl from '../assets/images/sheet_sonic_1794712275408.jpg';
 import sheetErkhembayarUrl from '../assets/images/sheet_erkhembayar_swag_1794715257007.jpg';
 
 export const STAGE_ASSET_URLS = {
@@ -45,7 +47,10 @@ export const STAGE_ASSET_URLS = {
   neonAlley: stageNeonAlleyUrl,
   templeDojo: stageTempleDojoUrl,
   volcanoArena: stageVolcanoArenaUrl,
-  spaceStation: stageSpaceStationUrl
+  spaceStation: stageSpaceStationUrl,
+  glacierFortress: stageGlacierFortressUrl,
+  thunderColosseum: stageThunderColosseumUrl,
+  shadowShrine: stageShadowShrineUrl
 } as const;
 
 export interface CrossoverSourceSheetSpec {
@@ -101,7 +106,6 @@ export const CROSSOVER_SOURCE_SHEETS: CrossoverSourceSheetSpec[] = [
   { id: 'dante', textureKey: 'raw-sheet-dante', url: sheetDanteUrl },
   { id: 'link', textureKey: 'raw-sheet-link', url: sheetLinkUrl },
   { id: 'megaman', textureKey: 'raw-sheet-megaman', url: sheetMegamanUrl, bodyHeight: 184 },
-  { id: 'sonic', textureKey: 'raw-sheet-sonic', url: sheetSonicUrl, rowBottomCrop: [0.865, 0.902], bodyHeight: 176 },
   // Originals
   {
     id: 'erkhembayar',

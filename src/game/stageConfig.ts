@@ -72,6 +72,30 @@ export const STAGE_DEFINITIONS: StageDefinition[] = [
     url: STAGE_ASSET_URLS.spaceStation,
     width: 1376,
     height: 768
+  },
+  {
+    id: 'glacier-fortress',
+    label: 'Glacier Ice Fortress',
+    key: 'glacier-fortress-stage',
+    url: STAGE_ASSET_URLS.glacierFortress,
+    width: 1376,
+    height: 768
+  },
+  {
+    id: 'thunder-colosseum',
+    label: 'Thunder Colosseum',
+    key: 'thunder-colosseum-stage',
+    url: STAGE_ASSET_URLS.thunderColosseum,
+    width: 1376,
+    height: 768
+  },
+  {
+    id: 'shadow-shrine',
+    label: 'Shadow Moon Shrine',
+    key: 'shadow-shrine-stage',
+    url: STAGE_ASSET_URLS.shadowShrine,
+    width: 1376,
+    height: 768
   }
 ];
 

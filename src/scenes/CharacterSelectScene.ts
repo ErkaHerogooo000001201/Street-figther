@@ -30,7 +30,6 @@ const FILTER_OPTIONS: FilterTabOption[] = [
   { id: 'Original', label: 'ORIGINALS', hotkey: '4' }
 ];
 
-const PAGE_SIZE = 28;
 const P1_COLOR = 0x38bdf8;
 const P2_COLOR = 0xf43f5e;
 
@@ -64,7 +63,6 @@ const BASE_ROSTER_ORDER = [
   'dante',
   'link',
   'megaman',
-  'sonic',
   'red-brawler',
   'jiujitsu-fighter',
   'green-boxer'
@@ -102,47 +100,47 @@ interface GridLayout {
 }
 
 function resolveGridLayout(count: number): GridLayout {
-  if (count > 18) {
+  if (count > 24) {
     return {
       cols: 7,
       cardWidth: 148,
-      cardHeight: 86,
+      cardHeight: 74,
       gapX: 12,
-      gapY: 10,
-      portraitSize: 44,
-      portraitY: -14,
-      nameY: 16,
+      gapY: 8,
+      portraitSize: 38,
+      portraitY: -13,
+      nameY: 14,
       nameFontSize: '12px',
-      originY: 31,
+      originY: 27,
       originFontSize: '9px'
     };
   }
-  if (count > 10) {
+  if (count > 12) {
     return {
       cols: 6,
       cardWidth: 170,
-      cardHeight: 106,
+      cardHeight: 94,
       gapX: 14,
-      gapY: 14,
-      portraitSize: 54,
-      portraitY: -18,
-      nameY: 20,
+      gapY: 12,
+      portraitSize: 48,
+      portraitY: -16,
+      nameY: 18,
       nameFontSize: '14px',
-      originY: 36,
+      originY: 33,
       originFontSize: '10px'
     };
   }
   return {
     cols: 5,
     cardWidth: 176,
-    cardHeight: 112,
+    cardHeight: 108,
     gapX: 16,
-    gapY: 16,
-    portraitSize: 56,
+    gapY: 14,
+    portraitSize: 54,
     portraitY: -18,
-    nameY: 21,
+    nameY: 20,
     nameFontSize: '14px',
-    originY: 38,
+    originY: 36,
     originFontSize: '10px'
   };
 }
@@ -156,7 +154,6 @@ interface GridCard {
 }
 
 interface PlayerCursor {
-  page: number;
   index: number;
   locked: boolean;
   characterId: string;
@@ -181,7 +178,7 @@ interface FilterTabButton {
 }
 
 /**
- * Character Select screen displaying the 100-fighter roster across clean pages
+ * Character Select screen displaying the 32-fighter roster on one clean grid
  * with universe filter tabs, special move spotlights, stage toggle, Bot
  * Difficulty toggle, 2D keyboard navigation, and click lock.
  */
@@ -191,11 +188,8 @@ export class CharacterSelectScene extends BaseScene {
   private botDifficulty: BotDifficulty = 'hard';
   private allRoster: CharacterDefinition[] = [];
   private roster: CharacterDefinition[] = [];
-  private pagedRoster: CharacterDefinition[] = [];
-  private currentPage = 0;
-  private totalPages = 1;
   private activeFilter: UniverseFilter = 'All';
-  private layout: GridLayout = resolveGridLayout(PAGE_SIZE);
+  private layout: GridLayout = resolveGridLayout(32);
   private filterTabs: FilterTabButton[] = [];
   private cards: GridCard[] = [];
   private cardPositions: Array<{ x: number; y: number }> = [];
@@ -205,9 +199,6 @@ export class CharacterSelectScene extends BaseScene {
   private p2Spotlight!: SpotlightPanel;
   private stageButtonText!: Phaser.GameObjects.Text;
   private botButtonText?: Phaser.GameObjects.Text;
-  private prevPageBtn!: Phaser.GameObjects.Text;
-  private nextPageBtn!: Phaser.GameObjects.Text;
-  private pageStatusText!: Phaser.GameObjects.Text;
   private transitioning = false;
 
   constructor() {
@@ -224,10 +215,7 @@ export class CharacterSelectScene extends BaseScene {
     this.allRoster = buildSelectableRoster();
     this.activeFilter = 'All';
     this.roster = [...this.allRoster];
-    this.currentPage = 0;
-    this.totalPages = Math.max(1, Math.ceil(this.roster.length / PAGE_SIZE));
-    this.pagedRoster = this.roster.slice(0, PAGE_SIZE);
-    this.layout = resolveGridLayout(this.pagedRoster.length);
+    this.layout = resolveGridLayout(this.roster.length);
     this.filterTabs = [];
     this.cards = [];
     this.cardPositions = [];
@@ -263,13 +251,12 @@ export class CharacterSelectScene extends BaseScene {
 
     this.buildTopControls();
     this.buildFilterTabs();
-    this.buildPageBar();
     this.buildCards();
     this.buildSpotlights();
     this.buildCursors();
     this.registerInput();
 
-    this.createFooterHint('1-4 / Q: Filter  •  [ / ]: Page  •  B: Bot Level  •  Tab: Stage  •  Esc: Back');
+    this.createFooterHint('1-4 / Q: Filter  •  B: Bot Level  •  Tab: Stage  •  Esc: Menu');
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.cards.forEach((card) => card.destroy());
@@ -279,9 +266,11 @@ export class CharacterSelectScene extends BaseScene {
   }
 
   private buildTopControls(): void {
+    this.createMenuButton(20, 24);
+
     if (this.mode === '1vcpu') {
       this.botButtonText = this.add
-        .text(24, 24, `Bot: ${this.botDifficulty.toUpperCase()} [B]`, {
+        .text(132, 24, `Bot: ${this.botDifficulty.toUpperCase()} [B]`, {
           color: '#facc15',
           fontFamily: 'monospace',
           fontSize: '13px',
@@ -390,69 +379,6 @@ export class CharacterSelectScene extends BaseScene {
     this.refreshFilterTabs();
   }
 
-  private buildPageBar(): void {
-    const { centerX } = this.cameras.main;
-    const y = 524;
-
-    this.prevPageBtn = this.add
-      .text(centerX - 185, y, '◀ PREV [[]', {
-        color: '#e2e8f0',
-        fontFamily: 'monospace',
-        fontSize: '12px',
-        fontStyle: 'bold',
-        backgroundColor: 'rgba(15, 23, 42, 0.92)',
-        padding: { x: 10, y: 4 }
-      })
-      .setOrigin(0.5)
-      .setDepth(25)
-      .setInteractive({ useHandCursor: true });
-
-    this.pageStatusText = this.add
-      .text(centerX, y, '', {
-        color: '#facc15',
-        fontFamily: 'monospace',
-        fontSize: '12px',
-        fontStyle: 'bold'
-      })
-      .setOrigin(0.5)
-      .setDepth(25);
-
-    this.nextPageBtn = this.add
-      .text(centerX + 185, y, 'NEXT []] ▶', {
-        color: '#e2e8f0',
-        fontFamily: 'monospace',
-        fontSize: '12px',
-        fontStyle: 'bold',
-        backgroundColor: 'rgba(15, 23, 42, 0.92)',
-        padding: { x: 10, y: 4 }
-      })
-      .setOrigin(0.5)
-      .setDepth(25)
-      .setInteractive({ useHandCursor: true });
-
-    this.prevPageBtn.on('pointerover', () => this.prevPageBtn.setColor('#38bdf8'));
-    this.prevPageBtn.on('pointerout', () => this.refreshPageBar());
-    this.prevPageBtn.on('pointerdown', () => this.changePage(-1));
-
-    this.nextPageBtn.on('pointerover', () => this.nextPageBtn.setColor('#38bdf8'));
-    this.nextPageBtn.on('pointerout', () => this.refreshPageBar());
-    this.nextPageBtn.on('pointerdown', () => this.changePage(1));
-
-    this.refreshPageBar();
-  }
-
-  private refreshPageBar(): void {
-    const startIdx = this.currentPage * PAGE_SIZE + 1;
-    const endIdx = Math.min(this.roster.length, (this.currentPage + 1) * PAGE_SIZE);
-    this.pageStatusText.setText(
-      `PAGE ${this.currentPage + 1} / ${this.totalPages}  •  #${startIdx}-${endIdx} of ${this.roster.length}`
-    );
-
-    const multiPage = this.totalPages > 1;
-    this.prevPageBtn.setVisible(multiPage).setColor('#e2e8f0');
-    this.nextPageBtn.setVisible(multiPage).setColor('#e2e8f0');
-  }
-
   private refreshFilterTabs(): void {
     this.filterTabs.forEach((tab) => {
       const active = tab.id === this.activeFilter;
@@ -479,12 +405,8 @@ export class CharacterSelectScene extends BaseScene {
       this.activeFilter = 'All';
     }
 
-    this.currentPage = 0;
-    this.totalPages = Math.max(1, Math.ceil(this.roster.length / PAGE_SIZE));
-    this.pagedRoster = this.roster.slice(0, PAGE_SIZE);
-    this.layout = resolveGridLayout(this.pagedRoster.length);
+    this.layout = resolveGridLayout(this.roster.length);
     this.refreshFilterTabs();
-    this.refreshPageBar();
     this.rebuildCardsAndResetCursors();
     playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
   }
@@ -495,64 +417,18 @@ export class CharacterSelectScene extends BaseScene {
     this.applyFilter(next.id);
   }
 
-  private changePage(delta: number, preferEndIndex = false): void {
-    if (this.transitioning || this.totalPages <= 1) {
-      return;
-    }
-    const targetPage = Phaser.Math.Wrap(this.currentPage + delta, 0, this.totalPages);
-    this.setPage(targetPage, preferEndIndex);
-    playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
-  }
-
-  private setPage(page: number, preferEndIndex = false): void {
-    this.currentPage = Phaser.Math.Clamp(page, 0, this.totalPages - 1);
-    const start = this.currentPage * PAGE_SIZE;
-    this.pagedRoster = this.roster.slice(start, start + PAGE_SIZE);
-    this.layout = resolveGridLayout(this.pagedRoster.length);
-
-    this.cards.forEach((card) => card.destroy());
-    this.cards = [];
-    this.cardPositions = [];
-    this.buildCards();
-    this.refreshPageBar();
-
-    this.p1.outline.setSize(this.layout.cardWidth + 8, this.layout.cardHeight + 8);
-    this.p2.outline.setSize(this.layout.cardWidth + 8, this.layout.cardHeight + 8);
-
-    const unlockedCursor = !this.p1.locked ? this.p1 : this.mode === '1v1' && !this.p2.locked ? this.p2 : null;
-    if (unlockedCursor) {
-      unlockedCursor.page = this.currentPage;
-      unlockedCursor.index = preferEndIndex ? this.pagedRoster.length - 1 : 0;
-      if (this.mode === '1v1' && this.otherCursor(unlockedCursor).page === this.currentPage) {
-        const other = this.otherCursor(unlockedCursor);
-        if (unlockedCursor.index === other.index && this.pagedRoster.length > 1) {
-          unlockedCursor.index = unlockedCursor.index === 0 ? 1 : unlockedCursor.index - 1;
-        }
-      }
-      const picked = this.pagedRoster[unlockedCursor.index];
-      if (picked) {
-        unlockedCursor.characterId = picked.id;
-      }
-    }
-
-    this.refreshCursor(this.p1);
-    this.refreshCursor(this.p2);
-  }
-
   private rebuildCardsAndResetCursors(): void {
     this.cards.forEach((card) => card.destroy());
     this.cards = [];
     this.cardPositions = [];
     this.buildCards();
 
-    this.p1.page = 0;
     this.p1.index = 0;
-    this.p1.characterId = this.pagedRoster[0]?.id ?? this.allRoster[0].id;
+    this.p1.characterId = this.roster[0]?.id ?? this.allRoster[0].id;
 
-    const p2Idx = this.mode === '1v1' ? Math.min(1, this.pagedRoster.length - 1) : 0;
-    this.p2.page = 0;
+    const p2Idx = this.mode === '1v1' ? Math.min(1, this.roster.length - 1) : 0;
     this.p2.index = p2Idx;
-    this.p2.characterId = this.pagedRoster[p2Idx]?.id ?? this.allRoster[0].id;
+    this.p2.characterId = this.roster[p2Idx]?.id ?? this.allRoster[0].id;
 
     this.p1.outline.setSize(this.layout.cardWidth + 8, this.layout.cardHeight + 8);
     this.p2.outline.setSize(this.layout.cardWidth + 8, this.layout.cardHeight + 8);
@@ -570,17 +446,17 @@ export class CharacterSelectScene extends BaseScene {
   private buildCards(): void {
     const { centerX } = this.cameras.main;
     const { cols, cardWidth, cardHeight, gapX, gapY } = this.layout;
-    const rows = Math.ceil(this.pagedRoster.length / cols);
+    const rows = Math.ceil(this.roster.length / cols);
     const gridW =
-      Math.min(cols, this.pagedRoster.length) * cardWidth + (Math.min(cols, this.pagedRoster.length) - 1) * gapX;
+      Math.min(cols, this.roster.length) * cardWidth + (Math.min(cols, this.roster.length) - 1) * gapX;
     const gridH = rows * cardHeight + Math.max(0, rows - 1) * gapY;
 
     const areaTop = 100;
-    const areaBottom = 502;
+    const areaBottom = 530;
     const startX = centerX - gridW / 2 + cardWidth / 2;
     const startY = areaTop + Math.max(0, (areaBottom - areaTop - gridH) / 2) + cardHeight / 2;
 
-    this.pagedRoster.forEach((character, index) => {
+    this.roster.forEach((character, index) => {
       const col = index % cols;
       const row = Math.floor(index / cols);
       const x = startX + col * (cardWidth + gapX);
@@ -768,10 +644,10 @@ export class CharacterSelectScene extends BaseScene {
     }
 
     if (hidden) {
-      panel.title.setText('??? (Random from 99 Rivals)');
+      panel.title.setText('??? (Random Rival)');
       panel.origin.setText(`CPU Challenger • ${this.botDifficulty.toUpperCase()} AI`);
       panel.specialName.setText('SPECIAL: Pick your fighter first');
-      panel.specialDesc.setText('Click any fighter above to battle across all 100 fighters.');
+      panel.specialDesc.setText('Click any fighter above to battle across anime & game worlds.');
       panel.portrait.setAlpha(0.25);
       return;
     }
@@ -793,11 +669,11 @@ export class CharacterSelectScene extends BaseScene {
   }
 
   private buildCursors(): void {
-    const p1Char = this.pagedRoster[0] ?? this.allRoster[0];
+    const p1Char = this.roster[0] ?? this.allRoster[0];
     this.p1 = this.createCursor('P1', P1_COLOR, 0, p1Char.id);
 
     const p2Start = this.mode === '1v1' ? Math.min(1, this.cards.length - 1) : 0;
-    const p2Char = this.pagedRoster[p2Start] ?? p1Char;
+    const p2Char = this.roster[p2Start] ?? p1Char;
     this.p2 = this.createCursor(this.mode === '1vcpu' ? 'CPU' : 'P2', P2_COLOR, p2Start, p2Char.id);
 
     if (this.mode === '1vcpu') {
@@ -829,15 +705,14 @@ export class CharacterSelectScene extends BaseScene {
       .setOrigin(0.5)
       .setDepth(21);
 
-    return { page: 0, index, locked: false, characterId, outline, label: text };
+    return { index, locked: false, characterId, outline, label: text };
   }
 
   private refreshCursor(cursor: PlayerCursor): void {
     const isP2HiddenCpu = cursor === this.p2 && this.mode === '1vcpu' && !cursor.locked;
-    const onVisiblePage = cursor.page === this.currentPage;
     const position = this.cardPositions[cursor.index];
 
-    if (isP2HiddenCpu || !onVisiblePage || !position) {
+    if (isP2HiddenCpu || !position) {
       cursor.outline.setVisible(false);
       cursor.label.setVisible(false);
     } else {
@@ -899,10 +774,6 @@ export class CharacterSelectScene extends BaseScene {
     keyboard.on('keydown-THREE', () => this.applyFilter('Game'));
     keyboard.on('keydown-FOUR', () => this.applyFilter('Original'));
     keyboard.on('keydown-Q', () => this.cycleFilter());
-    keyboard.on('keydown-OPEN_BRACKET', () => this.changePage(-1));
-    keyboard.on('keydown-CLOSED_BRACKET', () => this.changePage(1));
-    keyboard.on('keydown-PAGE_UP', () => this.changePage(-1));
-    keyboard.on('keydown-PAGE_DOWN', () => this.changePage(1));
 
     keyboard.on('keydown-TAB', (event: KeyboardEvent) => {
       event.preventDefault();
@@ -917,32 +788,15 @@ export class CharacterSelectScene extends BaseScene {
       return;
     }
 
-    if (cursor.page !== this.currentPage) {
-      cursor.page = this.currentPage;
-      cursor.index = 0;
-    }
-
     const count = this.cards.length;
     if (count === 0) {
       return;
     }
 
-    // Turn pages cleanly when stepping past first/last card in 1vCPU or unlocked 1v1
-    if (this.totalPages > 1) {
-      if (delta === -1 && cursor.index === 0) {
-        this.changePage(-1, true);
-        return;
-      }
-      if (delta === 1 && cursor.index === count - 1) {
-        this.changePage(1, false);
-        return;
-      }
-    }
-
     const other = this.otherCursor(cursor);
     let next = Phaser.Math.Wrap(cursor.index + delta, 0, count);
 
-    if (this.mode === '1v1' && other.page === this.currentPage && next === other.index) {
+    if (this.mode === '1v1' && next === other.index) {
       const step = delta >= 0 ? 1 : -1;
       const skip = Phaser.Math.Wrap(next + step, 0, count);
 
@@ -950,9 +804,9 @@ export class CharacterSelectScene extends BaseScene {
         next = skip;
       } else if (!other.locked) {
         other.index = cursor.index;
-        other.characterId = this.pagedRoster[other.index]?.id ?? other.characterId;
+        other.characterId = this.roster[other.index]?.id ?? other.characterId;
         cursor.index = next;
-        cursor.characterId = this.pagedRoster[cursor.index]?.id ?? cursor.characterId;
+        cursor.characterId = this.roster[cursor.index]?.id ?? cursor.characterId;
         this.refreshCursor(cursor);
         this.refreshCursor(other);
         return;
@@ -961,9 +815,8 @@ export class CharacterSelectScene extends BaseScene {
       }
     }
 
-    cursor.page = this.currentPage;
     cursor.index = next;
-    cursor.characterId = this.pagedRoster[next]?.id ?? cursor.characterId;
+    cursor.characterId = this.roster[next]?.id ?? cursor.characterId;
     this.refreshCursor(cursor);
   }
 
@@ -975,26 +828,21 @@ export class CharacterSelectScene extends BaseScene {
     if (this.transitioning) {
       return;
     }
-    const char = this.pagedRoster[index];
+    const char = this.roster[index];
     if (!char) {
       return;
     }
 
     if (this.mode === '1vcpu' && !this.p1.locked) {
-      this.p1.page = this.currentPage;
       this.p1.index = index;
       this.p1.characterId = char.id;
       this.refreshCursor(this.p1);
     } else if (this.mode === '1v1') {
-      const p2OnSame = this.p2.page === this.currentPage && index === this.p2.index;
-      const p1OnSame = this.p1.page === this.currentPage && index === this.p1.index;
-      if (!this.p1.locked && !p2OnSame) {
-        this.p1.page = this.currentPage;
+      if (!this.p1.locked && index !== this.p2.index) {
         this.p1.index = index;
         this.p1.characterId = char.id;
         this.refreshCursor(this.p1);
-      } else if (this.p1.locked && !this.p2.locked && !p1OnSame) {
-        this.p2.page = this.currentPage;
+      } else if (this.p1.locked && !this.p2.locked && index !== this.p1.index) {
         this.p2.index = index;
         this.p2.characterId = char.id;
         this.refreshCursor(this.p2);
@@ -1006,13 +854,12 @@ export class CharacterSelectScene extends BaseScene {
     if (this.transitioning) {
       return;
     }
-    const char = this.pagedRoster[index];
+    const char = this.roster[index];
     if (!char) {
       return;
     }
 
     if (this.mode === '1vcpu') {
-      this.p1.page = this.currentPage;
       this.p1.index = index;
       this.p1.characterId = char.id;
       this.refreshCursor(this.p1);
@@ -1020,17 +867,12 @@ export class CharacterSelectScene extends BaseScene {
       return;
     }
 
-    const p2OnSame = this.p2.page === this.currentPage && index === this.p2.index;
-    const p1OnSame = this.p1.page === this.currentPage && index === this.p1.index;
-
-    if (!this.p1.locked && !p2OnSame) {
-      this.p1.page = this.currentPage;
+    if (!this.p1.locked && index !== this.p2.index) {
       this.p1.index = index;
       this.p1.characterId = char.id;
       this.refreshCursor(this.p1);
       this.confirmPlayer(this.p1);
-    } else if (this.p1.locked && !this.p2.locked && !p1OnSame) {
-      this.p2.page = this.currentPage;
+    } else if (this.p1.locked && !this.p2.locked && index !== this.p1.index) {
       this.p2.index = index;
       this.p2.characterId = char.id;
       this.refreshCursor(this.p2);
@@ -1043,15 +885,15 @@ export class CharacterSelectScene extends BaseScene {
       return;
     }
 
-    if (cursor.page === this.currentPage && this.pagedRoster[cursor.index]) {
-      cursor.characterId = this.pagedRoster[cursor.index].id;
+    if (this.roster[cursor.index]) {
+      cursor.characterId = this.roster[cursor.index].id;
     }
 
     cursor.locked = true;
     this.refreshCursor(cursor);
     playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
 
-    const card = cursor.page === this.currentPage ? this.cards[cursor.index] : undefined;
+    const card = this.cards[cursor.index];
     const onDone = (): void => {
       if (this.mode === '1vcpu') {
         this.runCpuSelection();
@@ -1085,22 +927,15 @@ export class CharacterSelectScene extends BaseScene {
     this.p2.locked = true;
     this.updateSpotlight(this.p2Spotlight, picked, false);
 
-    // If opponent sits on another page of the active roster, flip there to spotlight & flash!
     const rosterIdx = this.roster.findIndex((c) => c.id === picked.id);
     if (rosterIdx !== -1) {
-      const targetPage = Math.floor(rosterIdx / PAGE_SIZE);
-      const indexInPage = rosterIdx % PAGE_SIZE;
-      if (targetPage !== this.currentPage) {
-        this.setPage(targetPage);
-      }
-      this.p2.page = targetPage;
-      this.p2.index = indexInPage;
+      this.p2.index = rosterIdx;
       this.p2.label.setText('CPU');
       this.refreshCursor(this.p2);
 
       this.time.delayedCall(420, () => {
         playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
-        const cpuCard = this.cards[indexInPage];
+        const cpuCard = this.cards[rosterIdx];
         if (cpuCard) {
           cpuCard.flashLock(() => this.startMatch());
         } else {

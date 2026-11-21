@@ -3,21 +3,23 @@ import * as Phaser from 'phaser';
 import { AUDIO_KEYS, playAudioCue } from '../game/core/audio';
 import { STAGE_DEFINITIONS } from '../game/stageConfig';
 import { createSelectionCard, type SelectionCard } from '../game/ui';
-import { SCENE_KEYS, type MatchMode } from '../game/types';
+import { SCENE_KEYS, type BotDifficulty, type MatchMode } from '../game/types';
 import { BaseScene } from './BaseScene';
 
 interface LevelSelectData {
   mode: MatchMode;
+  botDifficulty?: BotDifficulty;
 }
 
 const ACCENT = 0xfacc15;
 const GRID_COLS = 3;
 
 /**
- * Stage selection screen showing all 6 fighting arenas in a 3x2 grid.
+ * Stage selection screen showing all 9 fighting arenas in a 3x3 grid on one screen.
  */
 export class LevelSelectScene extends BaseScene {
   private mode: MatchMode = '1v1';
+  private botDifficulty?: BotDifficulty;
   private cards: SelectionCard[] = [];
   private selectedIndex = 0;
 
@@ -27,6 +29,7 @@ export class LevelSelectScene extends BaseScene {
 
   init(data: LevelSelectData): void {
     this.mode = data?.mode ?? '1v1';
+    this.botDifficulty = data?.botDifficulty;
   }
 
   create(): void {
@@ -35,13 +38,39 @@ export class LevelSelectScene extends BaseScene {
 
     this.markActiveScene(SCENE_KEYS.LevelSelect);
     this.cameras.main.setBackgroundColor(0x020617);
-    this.createHeading('Select Stage', this.mode === '1v1' ? '1 vs 1 Local' : '1 vs CPU');
+    const botLabel = (this.botDifficulty ?? this.app.settingsStore.getState().botDifficulty).toUpperCase();
+    this.createHeading(
+      'Select Stage',
+      this.mode === '1v1'
+        ? `1 vs 1 Local • All ${STAGE_DEFINITIONS.length} Arenas`
+        : `1 vs CPU (${botLabel}) • All ${STAGE_DEFINITIONS.length} Arenas`
+    );
+
+    this.createMenuButton(24, 30);
+
+    const modeBackBtn = this.add
+      .text(this.cameras.main.width - 24, 30, '← MODE', {
+        color: '#e2e8f0',
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+        padding: { x: 14, y: 8 },
+        stroke: '#334155',
+        strokeThickness: 2
+      })
+      .setOrigin(1, 0.5)
+      .setDepth(120)
+      .setInteractive({ useHandCursor: true });
+    modeBackBtn.on('pointerover', () => modeBackBtn.setColor('#facc15'));
+    modeBackBtn.on('pointerout', () => modeBackBtn.setColor('#e2e8f0'));
+    modeBackBtn.on('pointerdown', () => this.scene.start(SCENE_KEYS.ModeSelect));
 
     this.buildCards();
     this.registerInput();
     this.setSelection(0);
 
-    this.createFooterHint('WASD / Arrows to choose • Enter / Space or Click to confirm • Esc back');
+    this.createFooterHint('WASD / Arrows / Tap to choose • Enter / Space to confirm • Esc Menu');
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.cards.forEach((card) => card.destroy());
@@ -51,13 +80,13 @@ export class LevelSelectScene extends BaseScene {
 
   private buildCards(): void {
     const { centerX } = this.cameras.main;
-    const cardWidth = 350;
-    const cardHeight = 232;
-    const gapX = 32;
-    const gapY = 24;
+    const cardWidth = 340;
+    const cardHeight = 158;
+    const gapX = 28;
+    const gapY = 16;
     const totalWidth = cardWidth * GRID_COLS + gapX * (GRID_COLS - 1);
     const startX = centerX - totalWidth / 2 + cardWidth / 2;
-    const startY = 250;
+    const startY = 204;
 
     STAGE_DEFINITIONS.forEach((stage, index) => {
       const col = index % GRID_COLS;
@@ -71,9 +100,10 @@ export class LevelSelectScene extends BaseScene {
         width: cardWidth,
         height: cardHeight,
         title: stage.label,
+        titleFontSize: '16px',
         texture: this.textures.exists(stage.key) ? stage.key : undefined,
-        imageMaxSize: cardWidth - 36,
-        imageOffsetY: -20,
+        imageMaxSize: 196,
+        imageOffsetY: -16,
         onHover: () => this.setSelection(index),
         onClick: () => this.confirm(index)
       });
@@ -98,7 +128,7 @@ export class LevelSelectScene extends BaseScene {
     keyboard.on('keydown-S', () => this.moveSelection(GRID_COLS));
     keyboard.on('keydown-ENTER', () => this.confirm(this.selectedIndex));
     keyboard.on('keydown-SPACE', () => this.confirm(this.selectedIndex));
-    keyboard.on('keydown-ESC', () => this.scene.start(SCENE_KEYS.ModeSelect));
+    keyboard.on('keydown-ESC', () => this.goToMenu());
     keyboard.on('keydown-BACKSPACE', () => this.scene.start(SCENE_KEYS.ModeSelect));
   }
 
@@ -117,7 +147,8 @@ export class LevelSelectScene extends BaseScene {
     playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
     this.scene.start(SCENE_KEYS.CharacterSelect, {
       mode: this.mode,
-      stageId: STAGE_DEFINITIONS[index].id
+      stageId: STAGE_DEFINITIONS[index].id,
+      botDifficulty: this.botDifficulty
     });
   }
 }
