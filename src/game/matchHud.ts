@@ -416,6 +416,8 @@ export class MatchHud {
       badge.setText(`COOLDOWN: ${cooldownSec.toFixed(1)}s`).setColor('#f59e0b').setVisible(true).setAlpha(1);
     } else if (ready) {
       badge.setText(readyText).setColor('#facc15');
+    } else {
+      badge.setVisible(false);
     }
   }
 

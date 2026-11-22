@@ -9,13 +9,15 @@ describe('sanitizeSettings', () => {
         sfxVolume: 0.4,
         musicVolume: 0.2,
         muted: true,
-        botDifficulty: 'nightmare'
+        botDifficulty: 'nightmare',
+        controlScheme: 'touch'
       })
     ).toEqual({
       sfxVolume: 0.4,
       musicVolume: 0.2,
       muted: true,
-      botDifficulty: 'nightmare'
+      botDifficulty: 'nightmare',
+      controlScheme: 'touch'
     });
   });
 
@@ -29,7 +31,8 @@ describe('sanitizeSettings', () => {
       sfxVolume: 0.35,
       musicVolume: 0.35,
       muted: false,
-      botDifficulty: 'hard'
+      botDifficulty: 'hard',
+      controlScheme: 'auto'
     });
   });
 
@@ -38,7 +41,8 @@ describe('sanitizeSettings', () => {
       sanitizeSettings({
         sfxVolume: 99,
         musicVolume: -1,
-        botDifficulty: 'invalid'
+        botDifficulty: 'invalid',
+        controlScheme: 'gamepad'
       })
     ).toEqual(DEFAULT_SETTINGS);
   });

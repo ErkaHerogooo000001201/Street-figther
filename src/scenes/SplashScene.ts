@@ -1,6 +1,11 @@
 import * as Phaser from 'phaser';
 
 import { AUDIO_KEYS, playAudioCue } from '../game/core/audio';
+import {
+  isIntroMusicPlaying,
+  startIntroMusic,
+  subscribeIntroMusicState
+} from '../game/core/introMusic';
 import { ensureCrossoverFighterPrepared } from '../game/crossoverRenderer';
 import { FIGHTER_CHARACTER_DEFINITIONS, getCharacterAnimationByAction } from '../game/hero';
 import { STAGE_DEFINITIONS } from '../game/stageConfig';
@@ -36,15 +41,19 @@ export class SplashScene extends BaseScene {
 
   private bgDriftDir = 1;
 
+  private ignoreNextPointerUp = false;
+
   constructor() {
     super(SCENE_KEYS.Splash);
   }
 
   create(): void {
     this.hasAdvanced = false;
+    this.ignoreNextPointerUp = false;
     this.sparks = [];
     this.floorPhase = 0;
     this.markActiveScene(SCENE_KEYS.Splash);
+    startIntroMusic(this.app.settingsStore.getState());
 
     const camera = this.cameras.main;
     const { width, height, centerX, centerY } = camera;
@@ -197,7 +206,9 @@ export class SplashScene extends BaseScene {
       playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
       camera.flash(200, 255, 255, 255);
       this.time.delayedCall(120, () => {
-        this.scene.start(SCENE_KEYS.MainMenu);
+        if (this.scene.isActive()) {
+          this.scene.start(SCENE_KEYS.MainMenu);
+        }
       });
     };
 
@@ -245,10 +256,67 @@ export class SplashScene extends BaseScene {
       ease: 'Sine.InOut'
     });
 
-    this.input.once('pointerup', advanceToMenu);
+    const soundBtn = this.add
+      .text(width - 24, 30, '', {
+        color: '#facc15',
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+        padding: { x: 16, y: 12 },
+        stroke: '#334155',
+        strokeThickness: 2
+      })
+      .setOrigin(1, 0.5)
+      .setDepth(25)
+      .setInteractive({ useHandCursor: true });
+
+    const syncSoundButton = (): void => {
+      if (!soundBtn.scene) {
+        return;
+      }
+      const settings = this.app.settingsStore.getState();
+      if (settings.muted) {
+        soundBtn.setText('♪ MUTED').setColor('#94a3b8');
+      } else if (isIntroMusicPlaying()) {
+        soundBtn.setText('♪ SONG: ON').setColor('#38bdf8');
+      } else {
+        soundBtn.setText('♪ PLAY SONG').setColor('#facc15');
+      }
+    };
+
+    soundBtn.on('pointerdown', () => {
+      this.ignoreNextPointerUp = true;
+      const settings = this.app.settingsStore.getState();
+      if (settings.muted) {
+        this.app.settingsStore.patchState({ muted: false });
+        startIntroMusic(this.app.settingsStore.getState());
+      } else if (!isIntroMusicPlaying()) {
+        startIntroMusic(settings);
+      } else {
+        this.app.settingsStore.patchState({ muted: true });
+      }
+      syncSoundButton();
+    });
+
+    const unsubMusic = subscribeIntroMusicState(syncSoundButton);
+    const unsubSettings = this.app.settingsStore.subscribe(syncSoundButton);
+    syncSoundButton();
+
+    const handleScenePointerUp = (): void => {
+      if (this.ignoreNextPointerUp) {
+        this.ignoreNextPointerUp = false;
+        return;
+      }
+      advanceToMenu();
+    };
+
+    this.input.on('pointerup', handleScenePointerUp);
     this.input.keyboard?.once('keydown', advanceToMenu);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      unsubMusic();
+      unsubSettings();
       this.enterButton?.destroy();
       this.enterButton = undefined;
       this.sparks = [];

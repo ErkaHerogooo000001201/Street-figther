@@ -37,6 +37,8 @@ import {
   type StarterGameConfig
 } from '../game/core/config';
 import { formatInputSnapshot } from '../game/core/input';
+import { detectPhoneOrTouchViewport, installInputModeTracking } from '../game/core/inputMode';
+import { preloadIntroMusic, updateIntroMusicSettings } from '../game/core/introMusic';
 import { saveJsonToPublicAsset } from '../game/core/saveJson';
 import { setAppContext, type AppContext } from '../game/context';
 import { GAME_TAGLINE, GAME_TITLE } from '../game/constants';
@@ -112,10 +114,12 @@ type LevelEditorObjectDefinition = LevelEditorDebugState['level']['objects'][num
 const EDITABLE_LEVEL_IDS = ['editor-playground'] as const;
 
 export function createApp(root: HTMLElement): void {
+  installInputModeTracking();
   const searchParams = new URLSearchParams(window.location.search);
   const shellMode = searchParams.get('shell');
   const isGameShellForced = shellMode === 'game';
-  const isMobileShell = shellMode === 'mobile';
+  const isCompactPhone = detectPhoneOrTouchViewport();
+  const isMobileShell = shellMode === 'mobile' || isCompactPhone;
   const isLocalDevHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
   const isDebugShell = !isGameShellForced && !isMobileShell && import.meta.env.DEV && isLocalDevHost;
 
@@ -146,6 +150,11 @@ export function createApp(root: HTMLElement): void {
             </div>
           ` : ''}
           <div id="game-root" class="game-root"></div>
+          ${!isDebugShell ? `
+            <button id="portrait-tip" class="portrait-tip" type="button">
+              Rotate phone sideways for full-screen 1P &amp; 2P view · Tap to hide
+            </button>
+          ` : ''}
         </section>
         ${isDebugShell ? `
           <aside id="debug-panel" class="debug-panel">
@@ -169,6 +178,7 @@ export function createApp(root: HTMLElement): void {
 
   const appShell = root.querySelector<HTMLElement>('.app-shell');
   const gameRoot = root.querySelector<HTMLElement>('#game-root');
+  const portraitTip = root.querySelector<HTMLButtonElement>('#portrait-tip');
   const debugPanel = root.querySelector<HTMLElement>('#debug-panel');
   const debugControls = root.querySelector<HTMLElement>('#debug-controls');
   const collapseButton = root.querySelector<HTMLButtonElement>('#debug-collapse');
@@ -176,6 +186,12 @@ export function createApp(root: HTMLElement): void {
   const playToast = root.querySelector<HTMLElement>('#play-toast');
   const profileToggle = root.querySelector<HTMLButtonElement>('#profile-toggle');
   const sceneBadge = root.querySelector<HTMLElement>('#scene-badge');
+
+  if (portraitTip) {
+    portraitTip.addEventListener('click', () => {
+      portraitTip.classList.add('is-dismissed');
+    });
+  }
 
   if (!appShell || !gameRoot) {
     throw new Error('App shell failed to mount');
@@ -198,6 +214,10 @@ export function createApp(root: HTMLElement): void {
   };
 
   setAppContext(context);
+  preloadIntroMusic();
+  settingsStore.subscribe((settings) => {
+    updateIntroMusicSettings(settings);
+  });
 
   const loadEditorLevelIntoStore = async (levelId: string, updateActiveLevel: boolean): Promise<void> => {
     const levelUrl = getLevelEditorLevelUrl(levelId);

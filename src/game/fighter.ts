@@ -210,6 +210,7 @@ export class Fighter {
   private blitzPassesLeft = 0;
   private blitzTimer = 0;
   private opponentLastX: number | undefined;
+  private roundToken = 0;
 
   constructor(options: FighterOptions) {
     this.scene = options.scene;
@@ -476,8 +477,13 @@ export class Fighter {
           : blocked
             ? 0x93c5fd
             : 0xff7a7a;
+    const token = this.roundToken;
     this.sprite.setTint(tint);
-    this.scene.time.delayedCall(outcome === 'parry' ? 140 : 100, () => this.sprite?.clearTint());
+    this.scene.time.delayedCall(outcome === 'parry' ? 140 : 100, () => {
+      if (this.roundToken === token && this.sprite?.scene) {
+        this.sprite.clearTint();
+      }
+    });
   }
 
   getHurtRect(): Phaser.Geom.Rectangle | null {
@@ -615,7 +621,9 @@ export class Fighter {
   }
 
   resetForRound(x: number, facing: 1 | -1): void {
+    this.roundToken += 1;
     this.clearSpecialZones();
+    this.sprite?.removeAllListeners();
     this.posX = Phaser.Math.Clamp(x, this.minX, this.maxX);
     this.facing = facing;
     this.maxHealth = this.combat().maxHealth;
@@ -776,6 +784,7 @@ export class Fighter {
   }
 
   destroy(): void {
+    this.roundToken += 1;
     this.clearSpecialZones();
     this.sprite?.removeAllListeners();
     this.sprite?.destroy();
@@ -995,6 +1004,7 @@ export class Fighter {
   }
 
   private startOneShot(animKey: string): void {
+    const token = this.roundToken;
     this.locked = true;
     this.queuedComboHeavy = false;
     this.currentAnimKey = animKey;
@@ -1004,7 +1014,7 @@ export class Fighter {
     this.sprite.removeAllListeners(`animationcomplete-${animKey}`);
     this.sprite.play({ key: animKey, repeat: 0 }, true);
     this.sprite.once(`animationcomplete-${animKey}`, () => {
-      if (this.defeated) {
+      if (this.defeated || this.roundToken !== token || !this.sprite?.scene) {
         return;
       }
 
@@ -1024,6 +1034,7 @@ export class Fighter {
   }
 
   private startSpecial(isSecret = false): void {
+    const token = this.roundToken;
     this.locked = true;
     this.queuedComboHeavy = false;
     this.comboHits = 0;
@@ -1055,12 +1066,12 @@ export class Fighter {
     this.sprite.removeAllListeners(`animationcomplete-${this.actionKeys.specialCharge}`);
     this.sprite.play({ key: this.actionKeys.specialCharge, repeat: 0 }, true);
     this.sprite.once(`animationcomplete-${this.actionKeys.specialCharge}`, () => {
-      if (this.defeated) {
+      if (this.defeated || this.roundToken !== token || !this.sprite?.scene) {
         return;
       }
 
       this.scene.time.delayedCall(isSecret ? SUPER_FREEZE_MS + 80 : SUPER_FREEZE_MS, () => {
-        if (!this.defeated) {
+        if (!this.defeated && this.roundToken === token && this.sprite?.scene) {
           this.executeSpecial(isSecret);
         }
       });
@@ -1068,6 +1079,7 @@ export class Fighter {
   }
 
   private executeSpecial(isSecret = false): void {
+    const token = this.roundToken;
     this.currentAnimKey = this.actionKeys.special;
     this.attackId += 1;
     this.attackConnected = true;
@@ -1087,6 +1099,10 @@ export class Fighter {
     }
 
     this.sprite.once(`animationcomplete-${this.actionKeys.special}`, () => {
+      if (this.roundToken !== token || !this.sprite?.scene) {
+        return;
+      }
+
       this.locked = false;
       this.dashTimer = 0;
       this.dashVelX = 0;
@@ -1586,7 +1602,11 @@ export class Fighter {
             scale: 1.28,
             duration: 170,
             ease: 'Cubic.Out',
-            onComplete: () => visual.destroy()
+            onComplete: () => {
+              if (visual.scene) {
+                visual.destroy();
+              }
+            }
           });
         }
         this.specialZones.splice(i, 1);

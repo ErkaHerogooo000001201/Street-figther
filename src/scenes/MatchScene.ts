@@ -1,5 +1,7 @@
 import * as Phaser from 'phaser';
 
+import { formatControlSchemeLabel } from '../game/core/inputMode';
+import { stopIntroMusic } from '../game/core/introMusic';
 import {
   setStageMusicDucked,
   startStageMusic,
@@ -12,6 +14,7 @@ import { ensureCrossoverFighterPrepared } from '../game/crossoverRenderer';
 import { Fighter, NEUTRAL_FIGHTER_INPUT, type BlockOutcome, type FighterInput } from '../game/fighter';
 import { getCharacterDefinition } from '../game/hero';
 import { MatchHud } from '../game/matchHud';
+import { CONTROL_SCHEMES } from '../game/settings';
 import { getStageDefinition } from '../game/stageConfig';
 import { playSuperCutIn } from '../game/superCutIn';
 import { SCENE_KEYS, type BotDifficulty, type MatchConfig } from '../game/types';
@@ -54,9 +57,27 @@ interface TouchInputState {
   specialQueued: boolean;
 }
 
+interface PadSpecialButton {
+  rect: Phaser.GameObjects.Rectangle;
+  label: Phaser.GameObjects.Text;
+}
+
+function createEmptyTouchState(): TouchInputState {
+  return {
+    left: false,
+    right: false,
+    block: false,
+    jumpQueued: false,
+    lightQueued: false,
+    heavyQueued: false,
+    specialQueued: false
+  };
+}
+
 /**
  * The versus match: two fighters face off in a best-of-3 match. Supports
- * difficulty-scaled 1vCPU controls and full 1v1 local multiplayer.
+ * adaptive phone touch controls (both 1P arcade pad and 2P split dual pads)
+ * as well as full desktop keyboard multiplayer, switching live by how it is played.
  */
 export class MatchScene extends BaseScene {
   private config: MatchConfig = {
@@ -93,18 +114,20 @@ export class MatchScene extends BaseScene {
   private overlay: Phaser.GameObjects.GameObject[] = [];
   private pauseOverlay: Phaser.GameObjects.GameObject[] = [];
   private pauseBtn?: Phaser.GameObjects.Text;
+  private controlsLegendText?: Phaser.GameObjects.Text;
 
-  private touchState: TouchInputState = {
-    left: false,
-    right: false,
-    block: false,
-    jumpQueued: false,
-    lightQueued: false,
-    heavyQueued: false,
-    specialQueued: false
-  };
-  private specialPadBtn?: Phaser.GameObjects.Rectangle;
-  private specialPadLabel?: Phaser.GameObjects.Text;
+  private p1TouchState: TouchInputState = createEmptyTouchState();
+  private p2TouchState: TouchInputState = createEmptyTouchState();
+  private p1SinglePad?: Phaser.GameObjects.Container;
+  private dualPad?: Phaser.GameObjects.Container;
+  private resetTouchHoldVisuals: Array<() => void> = [];
+  private p1SingleSpecial?: PadSpecialButton;
+  private p1DualSpecial?: PadSpecialButton;
+  private p2DualSpecial?: PadSpecialButton;
+  private p1SingleGuardBtn?: Phaser.GameObjects.Rectangle;
+  private p1DualGuardBtn?: Phaser.GameObjects.Rectangle;
+  private p2DualGuardBtn?: Phaser.GameObjects.Rectangle;
+  private roundToken = 0;
 
   constructor() {
     super(SCENE_KEYS.Match);
@@ -128,23 +151,25 @@ export class MatchScene extends BaseScene {
     this.overlay = [];
     this.pauseOverlay = [];
     this.pauseBtn = undefined;
+    this.controlsLegendText = undefined;
     this.koFreezeRemainingMs = 0;
-    this.specialPadBtn = undefined;
-    this.specialPadLabel = undefined;
+    this.p1SinglePad = undefined;
+    this.dualPad = undefined;
+    this.resetTouchHoldVisuals = [];
+    this.p1SingleSpecial = undefined;
+    this.p1DualSpecial = undefined;
+    this.p2DualSpecial = undefined;
+    this.p1SingleGuardBtn = undefined;
+    this.p1DualGuardBtn = undefined;
+    this.p2DualGuardBtn = undefined;
+    this.roundToken = 0;
     this.cleanupPauseSystems();
-    this.touchState = {
-      left: false,
-      right: false,
-      block: false,
-      jumpQueued: false,
-      lightQueued: false,
-      heavyQueued: false,
-      specialQueued: false
-    };
+    this.p1TouchState = createEmptyTouchState();
+    this.p2TouchState = createEmptyTouchState();
 
     this.markActiveScene(SCENE_KEYS.Match);
     this.cameras.main.setBackgroundColor(0x05070d);
-    this.input.addPointer(3);
+    this.input.addPointer(7);
 
     ensureCrossoverFighterPrepared(this, this.config.p1CharacterId);
     ensureCrossoverFighterPrepared(this, this.config.p2CharacterId);
@@ -155,14 +180,9 @@ export class MatchScene extends BaseScene {
     this.spawnFighters(groundY);
     this.registerKeys();
     this.createControlsLegend();
-
-    const isTouchDevice =
-      this.app.isMobileShell ||
-      this.sys.game.device.input.touch ||
-      (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
-    if (this.config.mode === '1vcpu' || isTouchDevice) {
-      this.createOnScreenPad();
-    }
+    this.createTouchPads();
+    this.syncControlLayout();
+    this.subscribeEffectiveInputMode(() => this.syncControlLayout());
 
     this.hud = new MatchHud(this, {
       mode: this.config.mode,
@@ -204,6 +224,7 @@ export class MatchScene extends BaseScene {
         .setScrollFactor(0);
     }
 
+    stopIntroMusic();
     const musicTheme = startStageMusic(this.config.stageId, this.app.settingsStore.getState());
     const unsubscribeMusicSettings = this.app.settingsStore.subscribe((settings) => {
       updateStageMusicSettings(settings);
@@ -250,7 +271,7 @@ export class MatchScene extends BaseScene {
     const p2Input = fighting
       ? this.cpu
         ? this.cpu.update(time, this.p2, this.p1)
-        : this.readKeys(this.p2Keys)
+        : this.readP2Input()
       : { ...NEUTRAL_FIGHTER_INPUT };
 
     p1Input.crouch = false;
@@ -423,9 +444,15 @@ export class MatchScene extends BaseScene {
       return;
     }
 
+    const token = this.roundToken;
     this.phase = 'roundEnd';
     this.showBanner('DRAW', '#e2e8f0', 1.1);
-    this.time.delayedCall(1100, () => this.startRound());
+    this.time.delayedCall(1100, () => {
+      if (!this.scene.isActive() || this.roundToken !== token) {
+        return;
+      }
+      this.startRound();
+    });
   }
 
   private buildStage(): void {
@@ -703,22 +730,34 @@ export class MatchScene extends BaseScene {
   }
 
   private readP1Input(): FighterInput {
-    const input = this.readKeys(this.p1Keys);
+    return this.mergeTouchInput(this.readKeys(this.p1Keys), this.p1TouchState);
+  }
 
-    input.left = input.left || this.touchState.left;
-    input.right = input.right || this.touchState.right;
-    input.block = input.block || this.touchState.block;
-    input.jump = input.jump || this.touchState.jumpQueued;
-    input.light = input.light || this.touchState.lightQueued;
-    input.heavy = input.heavy || this.touchState.heavyQueued;
-    input.special = input.special || this.touchState.specialQueued;
+  private readP2Input(): FighterInput {
+    return this.mergeTouchInput(this.readKeys(this.p2Keys), this.p2TouchState);
+  }
 
-    this.touchState.jumpQueued = false;
-    this.touchState.lightQueued = false;
-    this.touchState.heavyQueued = false;
-    this.touchState.specialQueued = false;
+  private mergeTouchInput(input: FighterInput, touch: TouchInputState): FighterInput {
+    input.left = input.left || touch.left;
+    input.right = input.right || touch.right;
+    input.block = input.block || touch.block;
+    input.jump = input.jump || touch.jumpQueued;
+    input.light = input.light || touch.lightQueued;
+    input.heavy = input.heavy || touch.heavyQueued;
+    input.special = input.special || touch.specialQueued;
+
+    touch.jumpQueued = false;
+    touch.lightQueued = false;
+    touch.heavyQueued = false;
+    touch.specialQueued = false;
 
     return input;
+  }
+
+  private resetAllTouchStates(): void {
+    this.p1TouchState = createEmptyTouchState();
+    this.p2TouchState = createEmptyTouchState();
+    this.resetTouchHoldVisuals.forEach((reset) => reset());
   }
 
   private readKeys(keys: PlayerKeys): FighterInput {
@@ -745,7 +784,7 @@ export class MatchScene extends BaseScene {
         ? 'Move: A/D or Arrows  •  Jump: W/Up  •  Tap Block = Parry / Hold = Guard  •  Attack: Space/F/G  •  Special: E/V  •  Esc/P Pause'
         : 'P1: WASD, S Guard/Parry, F/G Attack, E/V Special   •   P2: Arrows, Down Guard/Parry, J/K Attack, L Special   •   Esc/P Pause';
 
-    this.add
+    this.controlsLegendText = this.add
       .text(centerX, height - 16, text, {
         color: '#cbd5f5',
         fontFamily: 'monospace',
@@ -758,70 +797,240 @@ export class MatchScene extends BaseScene {
       .setScrollFactor(0);
   }
 
-  private createOnScreenPad(): void {
+  private createTouchPads(): void {
+    this.p1SinglePad = this.buildSinglePlayerPad();
+    if (this.config.mode === '1v1') {
+      this.dualPad = this.buildDualPlayerPad();
+    }
+  }
+
+  private buildSinglePlayerPad(): Phaser.GameObjects.Container {
     const { width, height } = this.cameras.main;
-    const y = height - 74;
+    const container = this.add.container(0, 0).setDepth(HUD_DEPTH).setScrollFactor(0);
+    const y = height - 66;
 
-    this.makeHoldPadButton(58, y, 72, 62, '◀', 0x1e293b, (down) => {
-      this.touchState.left = down;
+    this.makeHoldPadButton(container, 64, y, 84, 72, '◀', 0x1e293b, 0x38bdf8, (down) => {
+      this.p1TouchState.left = down;
     });
-    this.makeHoldPadButton(142, y, 72, 62, '▶', 0x1e293b, (down) => {
-      this.touchState.right = down;
+    this.makeHoldPadButton(container, 158, y, 84, 72, '▶', 0x1e293b, 0x38bdf8, (down) => {
+      this.p1TouchState.right = down;
     });
-    this.makeTapPadButton(232, y, 82, 62, 'JUMP', 0x1e293b, () => {
-      this.touchState.jumpQueued = true;
-    });
-
-    this.makeHoldPadButton(width - 358, y, 84, 62, 'BLOCK', 0x1e3a8a, (down) => {
-      this.touchState.block = down;
-    });
-    this.makeTapPadButton(width - 262, y, 84, 62, 'PUNCH', 0x7f1d1d, () => {
-      this.touchState.lightQueued = true;
-    });
-    this.makeTapPadButton(width - 168, y, 80, 62, 'KICK', 0x9a3412, () => {
-      this.touchState.heavyQueued = true;
+    this.makeTapPadButton(container, 258, y, 92, 72, 'JUMP', 0x1e293b, 0x38bdf8, () => {
+      this.p1TouchState.jumpQueued = true;
     });
 
-    const specialPair = this.makeTapPadButton(width - 66, y, 96, 62, 'SPECIAL', 0x334155, () => {
-      this.touchState.specialQueued = true;
+    this.p1SingleGuardBtn = this.makeHoldPadButton(
+      container,
+      width - 388,
+      y,
+      94,
+      72,
+      'GUARD',
+      0x1e3a8a,
+      0x38bdf8,
+      (down) => {
+        this.p1TouchState.block = down;
+      }
+    );
+    this.makeTapPadButton(container, width - 284, y, 90, 72, 'PUNCH', 0x7f1d1d, 0xf87171, () => {
+      this.p1TouchState.lightQueued = true;
     });
-    this.specialPadBtn = specialPair.rect;
-    this.specialPadLabel = specialPair.label;
+    this.makeTapPadButton(container, width - 184, y, 86, 72, 'KICK', 0x9a3412, 0xfb923c, () => {
+      this.p1TouchState.heavyQueued = true;
+    });
+
+    this.p1SingleSpecial = this.makeTapPadButton(
+      container,
+      width - 74,
+      y,
+      110,
+      72,
+      'SPECIAL',
+      0x334155,
+      0x64748b,
+      () => {
+        this.p1TouchState.specialQueued = true;
+      }
+    );
+
+    return container;
+  }
+
+  private buildDualPlayerPad(): Phaser.GameObjects.Container {
+    const { centerX, height } = this.cameras.main;
+    const container = this.add.container(0, 0).setDepth(HUD_DEPTH).setScrollFactor(0);
+    const y = height - 66;
+
+    // Subtle center dead-zone divider between P1 (left half) and P2 (right half)
+    const divider = this.add.rectangle(centerX, y, 2, 76, 0x475569, 0.7);
+    const splitLabel = this.add
+      .text(centerX, y - 50, 'P1  |  P2', {
+        color: '#94a3b8',
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(2, 6, 23, 0.8)',
+        padding: { x: 8, y: 2 }
+      })
+      .setOrigin(0.5);
+    container.add([divider, splitLabel]);
+
+    // P1 Half (left: x = 19..593, cyan accent)
+    this.makeHoldPadButton(container, 54, y, 70, 74, '◀', 0x0f172a, 0x38bdf8, (down) => {
+      this.p1TouchState.left = down;
+    });
+    this.makeHoldPadButton(container, 132, y, 70, 74, '▶', 0x0f172a, 0x38bdf8, (down) => {
+      this.p1TouchState.right = down;
+    });
+    this.makeTapPadButton(container, 210, y, 70, 74, 'JMP', 0x0f172a, 0x38bdf8, () => {
+      this.p1TouchState.jumpQueued = true;
+    });
+    this.p1DualGuardBtn = this.makeHoldPadButton(
+      container,
+      302,
+      y,
+      74,
+      74,
+      'GRD',
+      0x1e3a8a,
+      0x38bdf8,
+      (down) => {
+        this.p1TouchState.block = down;
+      }
+    );
+    this.makeTapPadButton(container, 384, y, 74, 74, 'PNC', 0x7f1d1d, 0x38bdf8, () => {
+      this.p1TouchState.lightQueued = true;
+    });
+    this.makeTapPadButton(container, 466, y, 74, 74, 'KCK', 0x9a3412, 0x38bdf8, () => {
+      this.p1TouchState.heavyQueued = true;
+    });
+    this.p1DualSpecial = this.makeTapPadButton(
+      container,
+      552,
+      y,
+      82,
+      74,
+      'SPL',
+      0x334155,
+      0x38bdf8,
+      () => {
+        this.p1TouchState.specialQueued = true;
+      }
+    );
+
+    // P2 Half (right: x = 693..1267, rose accent)
+    this.makeHoldPadButton(container, 728, y, 70, 74, '◀', 0x0f172a, 0xf43f5e, (down) => {
+      this.p2TouchState.left = down;
+    });
+    this.makeHoldPadButton(container, 806, y, 70, 74, '▶', 0x0f172a, 0xf43f5e, (down) => {
+      this.p2TouchState.right = down;
+    });
+    this.makeTapPadButton(container, 884, y, 70, 74, 'JMP', 0x0f172a, 0xf43f5e, () => {
+      this.p2TouchState.jumpQueued = true;
+    });
+    this.p2DualGuardBtn = this.makeHoldPadButton(
+      container,
+      976,
+      y,
+      74,
+      74,
+      'GRD',
+      0x1e3a8a,
+      0xf43f5e,
+      (down) => {
+        this.p2TouchState.block = down;
+      }
+    );
+    this.makeTapPadButton(container, 1058, y, 74, 74, 'PNC', 0x7f1d1d, 0xf43f5e, () => {
+      this.p2TouchState.lightQueued = true;
+    });
+    this.makeTapPadButton(container, 1140, y, 74, 74, 'KCK', 0x9a3412, 0xf43f5e, () => {
+      this.p2TouchState.heavyQueued = true;
+    });
+    this.p2DualSpecial = this.makeTapPadButton(
+      container,
+      1226,
+      y,
+      82,
+      74,
+      'SPL',
+      0x334155,
+      0xf43f5e,
+      () => {
+        this.p2TouchState.specialQueued = true;
+      }
+    );
+
+    return container;
+  }
+
+  private syncControlLayout(): void {
+    const mode = this.getEffectiveInputMode();
+    const isTouch = mode === 'touch';
+    const overlayBlocking = this.paused || this.phase === 'matchOver';
+
+    if (isTouch && !overlayBlocking) {
+      this.controlsLegendText?.setVisible(false);
+      if (this.config.mode === '1v1') {
+        this.p1SinglePad?.setVisible(false);
+        this.dualPad?.setVisible(true);
+      } else {
+        this.dualPad?.setVisible(false);
+        this.p1SinglePad?.setVisible(true);
+      }
+    } else {
+      this.p1SinglePad?.setVisible(false);
+      this.dualPad?.setVisible(false);
+      this.controlsLegendText?.setVisible(!isTouch);
+      this.resetAllTouchStates();
+    }
+
+    if (this.paused) {
+      this.syncPauseOverlayLabels();
+    }
   }
 
   private makeHoldPadButton(
+    parent: Phaser.GameObjects.Container,
     x: number,
     y: number,
     w: number,
     h: number,
     caption: string,
     fill: number,
+    strokeColor: number,
     onToggle: (down: boolean) => void
-  ): void {
+  ): Phaser.GameObjects.Rectangle {
     const rect = this.add
-      .rectangle(x, y, w, h, fill, 0.74)
-      .setStrokeStyle(2, 0x64748b, 0.9)
-      .setDepth(HUD_DEPTH)
-      .setScrollFactor(0)
+      .rectangle(x, y, w, h, fill, 0.72)
+      .setStrokeStyle(2, strokeColor, 0.9)
       .setInteractive({ useHandCursor: true });
 
-    this.add
+    const label = this.add
       .text(x, y, caption, {
         color: '#f8fafc',
         fontFamily: 'monospace',
         fontSize: '14px',
         fontStyle: 'bold'
       })
-      .setOrigin(0.5)
-      .setDepth(HUD_DEPTH + 1)
-      .setScrollFactor(0);
+      .setOrigin(0.5);
+
+    parent.add([rect, label]);
 
     const activePointers = new Set<number>();
     const syncState = (): void => {
       const down = activePointers.size > 0;
-      rect.setFillStyle(down ? 0x38bdf8 : fill, down ? 0.92 : 0.74);
+      rect.setFillStyle(down ? strokeColor : fill, down ? 0.92 : 0.72);
+      label.setColor(down ? '#020617' : '#f8fafc');
       onToggle(down);
     };
+
+    this.resetTouchHoldVisuals.push(() => {
+      if (activePointers.size > 0) {
+        activePointers.clear();
+        syncState();
+      }
+    });
 
     rect.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       activePointers.add(pointer.id);
@@ -836,22 +1045,24 @@ export class MatchScene extends BaseScene {
     rect.on('pointerupoutside', release);
     rect.on('pointercancel', release);
     rect.on('pointerout', release);
+
+    return rect;
   }
 
   private makeTapPadButton(
+    parent: Phaser.GameObjects.Container,
     x: number,
     y: number,
     w: number,
     h: number,
     caption: string,
     fill: number,
+    strokeColor: number,
     onTap: () => void
-  ): { rect: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text } {
+  ): PadSpecialButton {
     const rect = this.add
       .rectangle(x, y, w, h, fill, 0.78)
-      .setStrokeStyle(2, 0x94a3b8, 0.9)
-      .setDepth(HUD_DEPTH)
-      .setScrollFactor(0)
+      .setStrokeStyle(2, strokeColor, 0.9)
       .setInteractive({ useHandCursor: true });
 
     const label = this.add
@@ -861,9 +1072,9 @@ export class MatchScene extends BaseScene {
         fontSize: '14px',
         fontStyle: 'bold'
       })
-      .setOrigin(0.5)
-      .setDepth(HUD_DEPTH + 1)
-      .setScrollFactor(0);
+      .setOrigin(0.5);
+
+    parent.add([rect, label]);
 
     rect.on('pointerdown', () => {
       rect.setScale(0.94);
@@ -881,29 +1092,59 @@ export class MatchScene extends BaseScene {
   }
 
   private updateSpecialPadGlow(): void {
-    if (!this.specialPadBtn || !this.specialPadLabel) {
+    this.syncFighterPadVisuals(
+      this.p1,
+      this.p1SingleSpecial,
+      this.p1SingleGuardBtn,
+      'SPECIAL',
+      0x38bdf8
+    );
+    this.syncFighterPadVisuals(this.p1, this.p1DualSpecial, this.p1DualGuardBtn, 'SPL', 0x38bdf8);
+    this.syncFighterPadVisuals(this.p2, this.p2DualSpecial, this.p2DualGuardBtn, 'SPL', 0xf43f5e);
+  }
+
+  private syncFighterPadVisuals(
+    fighter: Fighter,
+    specialBtn: PadSpecialButton | undefined,
+    guardBtn: Phaser.GameObjects.Rectangle | undefined,
+    readyCaption: string,
+    baseGuardStroke: number
+  ): void {
+    if (guardBtn) {
+      const guard = fighter.guard01;
+      const guardStroke = guard <= 0.25 ? 0xf43f5e : guard <= 0.55 ? 0xf59e0b : baseGuardStroke;
+      guardBtn.setStrokeStyle(2, guardStroke, 0.95);
+    }
+
+    if (!specialBtn) {
       return;
     }
 
-    const cd = this.p1.cooldownRemainingSeconds;
-    const ready = this.phase === 'fighting' && (this.p1.isMeterReady || this.p1.isSecretReady);
+    const cd = fighter.cooldownRemainingSeconds;
+    const ready = this.phase === 'fighting' && (fighter.isMeterReady || fighter.isSecretReady);
     if (ready) {
-      this.specialPadBtn.setFillStyle(0xeab308, 0.95).setStrokeStyle(2, 0xfef08a, 1);
-      this.specialPadLabel.setText('SPECIAL').setColor('#020617');
+      const secretGlow = fighter.isSecretReady;
+      specialBtn.rect
+        .setFillStyle(secretGlow ? 0xf97316 : 0xeab308, 0.95)
+        .setStrokeStyle(2, 0xfef08a, 1);
+      specialBtn.label.setText(secretGlow ? 'SECRET!' : readyCaption).setColor('#020617');
     } else if (cd > 0.05) {
-      this.specialPadBtn.setFillStyle(0x78350f, 0.78).setStrokeStyle(2, 0xf59e0b, 0.9);
-      this.specialPadLabel.setText(`${cd.toFixed(1)}s`).setColor('#fde68a');
+      specialBtn.rect.setFillStyle(0x78350f, 0.78).setStrokeStyle(2, 0xf59e0b, 0.9);
+      specialBtn.label.setText(`${cd.toFixed(1)}s`).setColor('#fde68a');
     } else {
-      this.specialPadBtn.setFillStyle(0x334155, 0.55).setStrokeStyle(2, 0x64748b, 0.7);
-      this.specialPadLabel.setText('SPECIAL').setColor('#94a3b8');
+      specialBtn.rect.setFillStyle(0x334155, 0.55).setStrokeStyle(2, 0x64748b, 0.7);
+      specialBtn.label.setText(readyCaption).setColor('#94a3b8');
     }
   }
 
   private startRound(): void {
+    this.roundToken += 1;
+    const token = this.roundToken;
     this.phase = 'intro';
     this.roundTimeMs = ROUND_SECONDS * 1000;
     this.koFreezeRemainingMs = 0;
     this.cameras.main.setZoom(1);
+    this.syncControlLayout();
 
     const fullMin = EDGE_MARGIN;
     const fullMax = this.stageWorldWidth - EDGE_MARGIN;
@@ -921,7 +1162,7 @@ export class MatchScene extends BaseScene {
     this.showBanner(`ROUND ${this.roundNumber}`, '#f8fafc');
 
     this.time.delayedCall(900, () => {
-      if (this.phase !== 'intro') {
+      if (!this.scene.isActive() || this.roundToken !== token || this.phase !== 'intro') {
         return;
       }
 
@@ -930,7 +1171,11 @@ export class MatchScene extends BaseScene {
       this.p1.setFrozen(false);
       this.p2.setFrozen(false);
 
-      this.time.delayedCall(650, () => this.hideBanner());
+      this.time.delayedCall(650, () => {
+        if (this.scene.isActive() && this.roundToken === token) {
+          this.hideBanner();
+        }
+      });
     });
   }
 
@@ -939,6 +1184,7 @@ export class MatchScene extends BaseScene {
       return;
     }
 
+    const token = this.roundToken;
     this.phase = 'roundEnd';
     this.hud.applyHealth(this.p1.health01, this.p2.health01);
 
@@ -965,7 +1211,7 @@ export class MatchScene extends BaseScene {
       cam.shake(380, 0.018);
       cam.zoomTo(1.14, 150, Phaser.Math.Easing.Cubic.Out, true);
       this.time.delayedCall(650, () => {
-        if (!this.scene.isActive()) {
+        if (!this.scene.isActive() || this.roundToken !== token) {
           return;
         }
         cam.zoomTo(1, 420, Phaser.Math.Easing.Cubic.Out, true);
@@ -985,7 +1231,7 @@ export class MatchScene extends BaseScene {
     this.showVoiceCallout(this.cameras.main.centerX, this.cameras.main.centerY + 62, koLine, bannerColor);
 
     this.time.delayedCall(isKo ? 1650 : 1100, () => {
-      if (!this.scene.isActive()) {
+      if (!this.scene.isActive() || this.roundToken !== token) {
         return;
       }
       const matchOver = this.p1Wins >= ROUNDS_TO_WIN || this.p2Wins >= ROUNDS_TO_WIN;
@@ -1002,13 +1248,15 @@ export class MatchScene extends BaseScene {
   private endMatch(winnerName: string): void {
     this.phase = 'matchOver';
     this.hideBanner();
+    this.syncControlLayout();
 
     const { centerX, centerY, width, height } = this.cameras.main;
 
     const dim = this.add
       .rectangle(centerX, centerY, width, height, 0x020617, 0.68)
       .setDepth(OVERLAY_DEPTH)
-      .setScrollFactor(0);
+      .setScrollFactor(0)
+      .setInteractive();
 
     const title = this.add
       .text(centerX, centerY - 104, `${winnerName}  WINS!`, {
@@ -1033,11 +1281,25 @@ export class MatchScene extends BaseScene {
       .setDepth(OVERLAY_DEPTH)
       .setScrollFactor(0);
 
-    const rematch = this.makeOverlayButton(centerX, centerY + 24, 'Rematch  (R)', () => this.rematch());
-    const changeFighter = this.makeOverlayButton(centerX, centerY + 80, 'Change Fighter  (C)', () =>
-      this.changeFighters()
+    const isTouch = this.getEffectiveInputMode() === 'touch';
+    const rematch = this.makeOverlayButton(
+      centerX,
+      centerY + 24,
+      isTouch ? 'Rematch' : 'Rematch  (R)',
+      () => this.rematch()
     );
-    const menu = this.makeOverlayButton(centerX, centerY + 136, 'Main Menu  (Esc)', () => this.goToMenu());
+    const changeFighter = this.makeOverlayButton(
+      centerX,
+      centerY + 84,
+      isTouch ? 'Change Fighter' : 'Change Fighter  (C)',
+      () => this.changeFighters()
+    );
+    const menu = this.makeOverlayButton(
+      centerX,
+      centerY + 144,
+      isTouch ? 'Main Menu' : 'Main Menu  (Esc)',
+      () => this.goToMenu()
+    );
 
     this.overlay = [dim, title, score, rematch, changeFighter, menu];
   }
@@ -1049,7 +1311,9 @@ export class MatchScene extends BaseScene {
         fontFamily: 'monospace',
         fontSize: '22px',
         backgroundColor: 'rgba(15, 23, 42, 0.92)',
-        padding: { x: 18, y: 10 }
+        padding: { x: 24, y: 12 },
+        stroke: '#334155',
+        strokeThickness: 2
       })
       .setOrigin(0.5)
       .setDepth(OVERLAY_DEPTH)
@@ -1103,13 +1367,7 @@ export class MatchScene extends BaseScene {
     }
 
     this.paused = true;
-    this.touchState.left = false;
-    this.touchState.right = false;
-    this.touchState.block = false;
-    this.touchState.jumpQueued = false;
-    this.touchState.lightQueued = false;
-    this.touchState.heavyQueued = false;
-    this.touchState.specialQueued = false;
+    this.syncControlLayout();
 
     this.time.paused = true;
     this.tweens.pauseAll();
@@ -1129,6 +1387,7 @@ export class MatchScene extends BaseScene {
     this.destroyPauseOverlay();
     this.cleanupPauseSystems();
     this.pauseBtn?.setText('⏸ PAUSE');
+    this.syncControlLayout();
   }
 
   private cleanupPauseSystems(): void {
@@ -1156,13 +1415,13 @@ export class MatchScene extends BaseScene {
       .setInteractive();
 
     const panel = this.add
-      .rectangle(centerX, centerY, 440, 446, 0x0f172a, 0.96)
+      .rectangle(centerX, centerY, 446, 504, 0x0f172a, 0.96)
       .setStrokeStyle(2, 0x334155, 1)
       .setDepth(depth + 1)
       .setScrollFactor(0);
 
     const title = this.add
-      .text(centerX, centerY - 170, 'PAUSED', {
+      .text(centerX, centerY - 202, 'PAUSED', {
         color: '#facc15',
         fontFamily: 'monospace',
         fontSize: '38px',
@@ -1175,7 +1434,7 @@ export class MatchScene extends BaseScene {
       .setScrollFactor(0);
 
     const subtitle = this.add
-      .text(centerX, centerY - 130, `${stageLabel}  ·  ROUND ${this.roundNumber}`, {
+      .text(centerX, centerY - 162, `${stageLabel}  ·  ROUND ${this.roundNumber}`, {
         color: '#94a3b8',
         fontFamily: 'monospace',
         fontSize: '14px'
@@ -1184,46 +1443,61 @@ export class MatchScene extends BaseScene {
       .setDepth(depth + 2)
       .setScrollFactor(0);
 
+    const isTouch = this.getEffectiveInputMode() === 'touch';
+
     const resumeBtn = this.makePauseButton(
       centerX,
-      centerY - 70,
-      'Resume Match  (Esc / P)',
+      centerY - 104,
+      isTouch ? 'Resume Match' : 'Resume Match  (Esc / P)',
       depth + 2,
       true,
       () => this.resumeMatch()
     );
+    resumeBtn.setData('pauseBtnKind', 'resume');
+
+    const controlsBtn = this.makePauseButton(
+      centerX,
+      centerY - 48,
+      this.getPauseControlsLabel(),
+      depth + 2,
+      false,
+      () => this.cycleControlsFromPause()
+    );
+    controlsBtn.setData('pauseBtnKind', 'controls');
 
     const soundBtn = this.makePauseButton(
       centerX,
-      centerY - 10,
+      centerY + 8,
       this.getPauseSoundLabel(),
       depth + 2,
       false,
       () => this.toggleMuteFromPause()
     );
-    soundBtn.setData('pauseSoundBtn', true);
+    soundBtn.setData('pauseBtnKind', 'sound');
 
     const restartBtn = this.makePauseButton(
       centerX,
-      centerY + 50,
-      'Restart Match  (R)',
+      centerY + 64,
+      isTouch ? 'Restart Match' : 'Restart Match  (R)',
       depth + 2,
       false,
       () => this.restartFromPause()
     );
+    restartBtn.setData('pauseBtnKind', 'restart');
 
     const fighterBtn = this.makePauseButton(
       centerX,
-      centerY + 110,
-      'Change Fighter  (C)',
+      centerY + 120,
+      isTouch ? 'Change Fighter' : 'Change Fighter  (C)',
       depth + 2,
       false,
       () => this.changeFighters()
     );
+    fighterBtn.setData('pauseBtnKind', 'fighter');
 
     const menuBtn = this.makePauseButton(
       centerX,
-      centerY + 170,
+      centerY + 176,
       'Main Menu',
       depth + 2,
       false,
@@ -1237,6 +1511,8 @@ export class MatchScene extends BaseScene {
       subtitle,
       resumeBtn.bg,
       resumeBtn.label,
+      controlsBtn.bg,
+      controlsBtn.label,
       soundBtn.bg,
       soundBtn.label,
       restartBtn.bg,
@@ -1248,19 +1524,57 @@ export class MatchScene extends BaseScene {
     ];
   }
 
+  private syncPauseOverlayLabels(): void {
+    const isTouch = this.getEffectiveInputMode() === 'touch';
+    for (const item of this.pauseOverlay) {
+      if (!(item instanceof Phaser.GameObjects.Rectangle)) {
+        continue;
+      }
+      const kind = item.getData('pauseBtnKind') as string | undefined;
+      const label = item.getData('labelRef') as Phaser.GameObjects.Text | undefined;
+      if (!kind || !label) {
+        continue;
+      }
+      if (kind === 'resume') {
+        label.setText(isTouch ? 'Resume Match' : 'Resume Match  (Esc / P)');
+      } else if (kind === 'controls') {
+        label.setText(this.getPauseControlsLabel());
+      } else if (kind === 'sound') {
+        label.setText(this.getPauseSoundLabel());
+      } else if (kind === 'restart') {
+        label.setText(isTouch ? 'Restart Match' : 'Restart Match  (R)');
+      } else if (kind === 'fighter') {
+        label.setText(isTouch ? 'Change Fighter' : 'Change Fighter  (C)');
+      }
+    }
+  }
+
+  private getPauseControlsLabel(): string {
+    const scheme = this.app.settingsStore.getState().controlScheme;
+    return `Controls: ${formatControlSchemeLabel(scheme, this.getEffectiveInputMode())}`;
+  }
+
+  private cycleControlsFromPause(): void {
+    const current = this.app.settingsStore.getState().controlScheme;
+    const idx = CONTROL_SCHEMES.indexOf(current);
+    const next = CONTROL_SCHEMES[(idx + 1) % CONTROL_SCHEMES.length];
+    this.app.settingsStore.patchState({ controlScheme: next });
+    this.syncPauseOverlayLabels();
+  }
+
   private getPauseSoundLabel(): string {
-    return this.app.settingsStore.getState().muted ? 'Sound: MUTED  (M)' : 'Sound: ON  (M)';
+    const isTouch = this.getEffectiveInputMode() === 'touch';
+    const muted = this.app.settingsStore.getState().muted;
+    if (isTouch) {
+      return muted ? 'Sound: MUTED' : 'Sound: ON';
+    }
+    return muted ? 'Sound: MUTED  (M)' : 'Sound: ON  (M)';
   }
 
   private toggleMuteFromPause(): void {
     const current = this.app.settingsStore.getState();
     this.app.settingsStore.patchState({ muted: !current.muted });
-    for (const item of this.pauseOverlay) {
-      if (item instanceof Phaser.GameObjects.Rectangle && item.getData('pauseSoundBtn')) {
-        const label = item.getData('labelRef') as Phaser.GameObjects.Text | undefined;
-        label?.setText(this.getPauseSoundLabel());
-      }
-    }
+    this.syncPauseOverlayLabels();
   }
 
   private makePauseButton(
@@ -1331,6 +1645,7 @@ export class MatchScene extends BaseScene {
     this.paused = false;
     this.destroyPauseOverlay();
     this.cleanupPauseSystems();
+    stopStageMusic();
     this.scene.start(SCENE_KEYS.CharacterSelect, {
       mode: this.config.mode,
       stageId: this.config.stageId,
@@ -1342,6 +1657,7 @@ export class MatchScene extends BaseScene {
     this.paused = false;
     this.destroyPauseOverlay();
     this.cleanupPauseSystems();
+    stopStageMusic();
     super.goToMenu();
   }
 

@@ -1,14 +1,16 @@
 import { STORAGE_KEY } from './constants';
 import { createStore, type Store } from './store';
-import type { BotDifficulty, GameSettings } from './types';
+import type { BotDifficulty, ControlScheme, GameSettings } from './types';
 
 export const BOT_DIFFICULTIES: BotDifficulty[] = ['easy', 'normal', 'hard', 'nightmare'];
+export const CONTROL_SCHEMES: ControlScheme[] = ['auto', 'touch', 'keyboard'];
 
 export const DEFAULT_SETTINGS: GameSettings = {
   sfxVolume: 0.8,
   musicVolume: 0.55,
   muted: false,
-  botDifficulty: 'hard'
+  botDifficulty: 'hard',
+  controlScheme: 'auto'
 };
 
 export function sanitizeSettings(raw: unknown): GameSettings {
@@ -22,11 +24,17 @@ export function sanitizeSettings(raw: unknown): GameSettings {
       ? candidate.botDifficulty
       : DEFAULT_SETTINGS.botDifficulty;
 
+  const controlScheme: ControlScheme =
+    candidate?.controlScheme && CONTROL_SCHEMES.includes(candidate.controlScheme)
+      ? candidate.controlScheme
+      : DEFAULT_SETTINGS.controlScheme;
+
   return {
     sfxVolume: normalizeVolume(candidate?.sfxVolume, legacyVolume ?? DEFAULT_SETTINGS.sfxVolume),
     musicVolume: normalizeVolume(candidate?.musicVolume, legacyVolume ?? DEFAULT_SETTINGS.musicVolume),
     muted: typeof candidate?.muted === 'boolean' ? candidate.muted : DEFAULT_SETTINGS.muted,
-    botDifficulty
+    botDifficulty,
+    controlScheme
   };
 }
 

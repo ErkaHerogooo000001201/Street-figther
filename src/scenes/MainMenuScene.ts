@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 
 import { AUDIO_KEYS, playAudioCue } from '../game/core/audio';
+import { startIntroMusic } from '../game/core/introMusic';
 import { GAME_TAGLINE, GAME_TITLE } from '../game/constants';
 import { ensureCrossoverFighterPrepared } from '../game/crossoverRenderer';
 import { getCharacterAnimationByAction } from '../game/hero';
@@ -30,6 +31,7 @@ export class MainMenuScene extends BaseScene {
     this.options = [];
 
     this.markActiveScene(SCENE_KEYS.MainMenu);
+    startIntroMusic(this.app.settingsStore.getState());
     const camera = this.cameras.main;
     const { width, height, centerX, centerY } = camera;
     camera.setBackgroundColor(0x020617);
@@ -92,7 +94,16 @@ export class MainMenuScene extends BaseScene {
       this.options = [];
     });
 
-    this.createFooterHint('Arrow keys / WASD to navigate • Enter / Click to select');
+    const footerHint = this.createFooterHint('');
+    const syncFooter = (mode: 'touch' | 'keyboard'): void => {
+      footerHint.setText(
+        mode === 'touch'
+          ? 'Tap an option to continue'
+          : 'Arrow keys / WASD to navigate • Enter / Click to select'
+      );
+    };
+    syncFooter(this.getEffectiveInputMode());
+    this.subscribeEffectiveInputMode(syncFooter);
   }
 
   private addFlankingStance(

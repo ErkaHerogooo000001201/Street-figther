@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 
 import { AUDIO_KEYS, playAudioCue } from '../game/core/audio';
+import { startIntroMusic } from '../game/core/introMusic';
 import { STAGE_DEFINITIONS } from '../game/stageConfig';
 import { createSelectionCard, type SelectionCard } from '../game/ui';
 import { SCENE_KEYS, type BotDifficulty, type MatchMode } from '../game/types';
@@ -37,6 +38,7 @@ export class LevelSelectScene extends BaseScene {
     this.selectedIndex = 0;
 
     this.markActiveScene(SCENE_KEYS.LevelSelect);
+    startIntroMusic(this.app.settingsStore.getState());
     this.cameras.main.setBackgroundColor(0x020617);
     const botLabel = (this.botDifficulty ?? this.app.settingsStore.getState().botDifficulty).toUpperCase();
     this.createHeading(
@@ -55,7 +57,7 @@ export class LevelSelectScene extends BaseScene {
         fontSize: '14px',
         fontStyle: 'bold',
         backgroundColor: 'rgba(15, 23, 42, 0.92)',
-        padding: { x: 14, y: 8 },
+        padding: { x: 16, y: 12 },
         stroke: '#334155',
         strokeThickness: 2
       })
@@ -70,7 +72,16 @@ export class LevelSelectScene extends BaseScene {
     this.registerInput();
     this.setSelection(0);
 
-    this.createFooterHint('WASD / Arrows / Tap to choose • Enter / Space to confirm • Esc Menu');
+    const footerHint = this.createFooterHint('');
+    const syncFooter = (mode: 'touch' | 'keyboard'): void => {
+      footerHint.setText(
+        mode === 'touch'
+          ? 'Tap any arena to battle'
+          : 'WASD / Arrows / Tap to choose • Enter / Space to confirm • Esc Menu'
+      );
+    };
+    syncFooter(this.getEffectiveInputMode());
+    this.subscribeEffectiveInputMode(syncFooter);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.cards.forEach((card) => card.destroy());

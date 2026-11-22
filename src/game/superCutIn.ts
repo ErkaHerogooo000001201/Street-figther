@@ -183,7 +183,13 @@ export function playSuperCutIn(scene: Phaser.Scene, options: SuperCutInOptions):
     ease: 'Quad.Out'
   });
 
-  scene.time.delayedCall(TOTAL_MS + 120, () => layers.forEach((object) => object.destroy()));
+  scene.time.delayedCall(TOTAL_MS + 120, () => {
+    layers.forEach((object) => {
+      if (object.scene) {
+        object.destroy();
+      }
+    });
+  });
 
   return TOTAL_MS;
 }

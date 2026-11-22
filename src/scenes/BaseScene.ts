@@ -1,5 +1,11 @@
 import * as Phaser from 'phaser';
 
+import {
+  resolveEffectiveInputMode,
+  subscribeDetectedInputMode,
+  type EffectiveInputMode
+} from '../game/core/inputMode';
+import { preloadIntroMusic, startIntroMusic, stopIntroMusic } from '../game/core/introMusic';
 import { getAppContext } from '../game/context';
 import type { AppContext } from '../game/context';
 import { SCENE_KEYS, type SceneKey } from '../game/types';
@@ -11,6 +17,39 @@ export abstract class BaseScene extends Phaser.Scene {
 
   protected markActiveScene(sceneKey: SceneKey): void {
     this.app.debugStore.patchState({ activeScene: sceneKey });
+    if (sceneKey === SCENE_KEYS.Match) {
+      stopIntroMusic();
+    } else if (sceneKey === SCENE_KEYS.Boot) {
+      preloadIntroMusic();
+    } else {
+      startIntroMusic(this.app.settingsStore.getState());
+    }
+  }
+
+  protected getEffectiveInputMode(): EffectiveInputMode {
+    return resolveEffectiveInputMode(this.app.settingsStore.getState(), this.app.isMobileShell);
+  }
+
+  protected subscribeEffectiveInputMode(onChange: (mode: EffectiveInputMode) => void): () => void {
+    let lastMode = this.getEffectiveInputMode();
+
+    const notifyIfChanged = (): void => {
+      const next = this.getEffectiveInputMode();
+      if (next !== lastMode) {
+        lastMode = next;
+        onChange(next);
+      }
+    };
+
+    const unsubDetected = subscribeDetectedInputMode(notifyIfChanged);
+    const unsubSettings = this.app.settingsStore.subscribe(notifyIfChanged);
+
+    const cleanup = (): void => {
+      unsubDetected();
+      unsubSettings();
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup);
+    return cleanup;
   }
 
   protected createHeading(title: string, subtitle: string): void {
@@ -35,11 +74,11 @@ export abstract class BaseScene extends Phaser.Scene {
     }
   }
 
-  protected createFooterHint(text: string): void {
+  protected createFooterHint(text: string): Phaser.GameObjects.Text {
     const { centerX, height } = this.cameras.main;
 
-    this.add
-      .text(centerX, height - 28, text, {
+    return this.add
+      .text(centerX, height - 24, text, {
         color: '#94a3b8',
         fontFamily: 'monospace',
         fontSize: '14px'
@@ -60,7 +99,7 @@ export abstract class BaseScene extends Phaser.Scene {
         fontSize: '14px',
         fontStyle: 'bold',
         backgroundColor: 'rgba(15, 23, 42, 0.92)',
-        padding: { x: 14, y: 8 },
+        padding: { x: 16, y: 11 },
         stroke: '#334155',
         strokeThickness: 2
       })

@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 
 import { AUDIO_KEYS, playAudioCue } from '../game/core/audio';
+import { startIntroMusic } from '../game/core/introMusic';
 import { FIGHTER_CHARACTER_DEFINITIONS, type CharacterDefinition } from '../game/hero';
 import { MY_FIGHTER_IDS } from '../game/myFighterLoader';
 import { BOT_DIFFICULTIES } from '../game/settings';
@@ -199,6 +200,9 @@ export class CharacterSelectScene extends BaseScene {
   private p2Spotlight!: SpotlightPanel;
   private stageButtonText!: Phaser.GameObjects.Text;
   private botButtonText?: Phaser.GameObjects.Text;
+  private undoP1Btn?: Phaser.GameObjects.Text;
+  private subtitleText!: Phaser.GameObjects.Text;
+  private footerHintText!: Phaser.GameObjects.Text;
   private transitioning = false;
 
   constructor() {
@@ -220,8 +224,10 @@ export class CharacterSelectScene extends BaseScene {
     this.cards = [];
     this.cardPositions = [];
     this.transitioning = false;
+    this.undoP1Btn = undefined;
 
     this.markActiveScene(SCENE_KEYS.CharacterSelect);
+    startIntroMusic(this.app.settingsStore.getState());
     this.cameras.main.setBackgroundColor(0x020617);
 
     const { centerX } = this.cameras.main;
@@ -234,19 +240,13 @@ export class CharacterSelectScene extends BaseScene {
       })
       .setOrigin(0.5);
 
-    this.add
-      .text(
-        centerX,
-        49,
-        this.mode === '1v1'
-          ? 'P1: WASD + Space/F  •  P2: Arrows + Enter  •  Click cards to lock'
-          : 'Click any fighter (or WASD / Arrows + Enter) to fight!',
-        {
-          color: '#94a3b8',
-          fontFamily: 'monospace',
-          fontSize: '12px'
-        }
-      )
+    this.subtitleText = this.add
+      .text(centerX, 49, '', {
+        color: '#94a3b8',
+        fontFamily: 'monospace',
+        fontSize: '13px',
+        fontStyle: 'bold'
+      })
       .setOrigin(0.5);
 
     this.buildTopControls();
@@ -256,7 +256,9 @@ export class CharacterSelectScene extends BaseScene {
     this.buildCursors();
     this.registerInput();
 
-    this.createFooterHint('1-4 / Q: Filter  •  B: Bot Level  •  Tab: Stage  •  Esc: Menu');
+    this.footerHintText = this.createFooterHint('');
+    this.syncAdaptiveLabels();
+    this.subscribeEffectiveInputMode(() => this.syncAdaptiveLabels());
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.cards.forEach((card) => card.destroy());
@@ -266,17 +268,19 @@ export class CharacterSelectScene extends BaseScene {
   }
 
   private buildTopControls(): void {
-    this.createMenuButton(20, 24);
+    this.createMenuButton(20, 26);
 
     if (this.mode === '1vcpu') {
       this.botButtonText = this.add
-        .text(132, 24, `Bot: ${this.botDifficulty.toUpperCase()} [B]`, {
+        .text(136, 26, '', {
           color: '#facc15',
           fontFamily: 'monospace',
           fontSize: '13px',
           fontStyle: 'bold',
           backgroundColor: 'rgba(15, 23, 42, 0.92)',
-          padding: { x: 10, y: 6 }
+          padding: { x: 12, y: 10 },
+          stroke: '#334155',
+          strokeThickness: 2
         })
         .setOrigin(0, 0.5)
         .setDepth(30)
@@ -285,17 +289,38 @@ export class CharacterSelectScene extends BaseScene {
       this.botButtonText.on('pointerover', () => this.botButtonText?.setColor('#fef08a'));
       this.botButtonText.on('pointerout', () => this.botButtonText?.setColor('#facc15'));
       this.botButtonText.on('pointerdown', () => this.cycleBotDifficulty());
+    } else {
+      this.undoP1Btn = this.add
+        .text(136, 26, '↺ UNDO P1', {
+          color: '#38bdf8',
+          fontFamily: 'monospace',
+          fontSize: '13px',
+          fontStyle: 'bold',
+          backgroundColor: 'rgba(15, 23, 42, 0.92)',
+          padding: { x: 12, y: 10 },
+          stroke: '#38bdf8',
+          strokeThickness: 2
+        })
+        .setOrigin(0, 0.5)
+        .setDepth(30)
+        .setVisible(false)
+        .setInteractive({ useHandCursor: true });
+
+      this.undoP1Btn.on('pointerover', () => this.undoP1Btn?.setColor('#f8fafc'));
+      this.undoP1Btn.on('pointerout', () => this.undoP1Btn?.setColor('#38bdf8'));
+      this.undoP1Btn.on('pointerdown', () => this.undoP1Lock());
     }
 
-    const stage = getStageDefinition(this.stageId);
     this.stageButtonText = this.add
-      .text(this.cameras.main.width - 24, 24, `Stage: ${stage.label} [Tab]`, {
+      .text(this.cameras.main.width - 24, 26, '', {
         color: '#e2e8f0',
         fontFamily: 'monospace',
         fontSize: '13px',
         fontStyle: 'bold',
         backgroundColor: 'rgba(15, 23, 42, 0.92)',
-        padding: { x: 10, y: 6 }
+        padding: { x: 12, y: 10 },
+        stroke: '#334155',
+        strokeThickness: 2
       })
       .setOrigin(1, 0.5)
       .setDepth(30)
@@ -306,6 +331,85 @@ export class CharacterSelectScene extends BaseScene {
     this.stageButtonText.on('pointerdown', () => this.cycleStage());
   }
 
+  private undoP1Lock(): void {
+    if (this.transitioning || this.mode !== '1v1' || !this.p1.locked || this.p2.locked) {
+      return;
+    }
+    this.p1.locked = false;
+    this.refreshCursor(this.p1);
+    this.syncAdaptiveLabels();
+    playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
+  }
+
+  private syncAdaptiveLabels(): void {
+    const inputMode = this.getEffectiveInputMode();
+    const isTouch = inputMode === 'touch';
+    const stage = getStageDefinition(this.stageId);
+
+    this.stageButtonText?.setText(isTouch ? `Stage: ${stage.label}` : `Stage: ${stage.label} [Tab]`);
+    this.botButtonText?.setText(
+      isTouch
+        ? `Bot: ${this.botDifficulty.toUpperCase()}`
+        : `Bot: ${this.botDifficulty.toUpperCase()} [B]`
+    );
+
+    if (this.mode === '1v1') {
+      const p1Locked = this.p1?.locked ?? false;
+      const p2Locked = this.p2?.locked ?? false;
+      this.undoP1Btn?.setVisible(p1Locked && !p2Locked && !this.transitioning);
+
+      if (!p1Locked) {
+        this.subtitleText?.setText(
+          isTouch
+            ? 'P1 TURN — Tap a fighter to lock in'
+            : 'P1 TURN — WASD + Space/F (or click)  •  P2: Arrows + Enter'
+        ).setColor('#38bdf8');
+      } else if (!p2Locked) {
+        this.subtitleText?.setText(
+          isTouch
+            ? 'P2 TURN — Tap a fighter to lock in'
+            : 'P2 TURN — Arrows + Enter (or click a fighter)'
+        ).setColor('#f43f5e');
+      } else {
+        this.subtitleText?.setText('FIGHTERS LOCKED — STARTING MATCH!').setColor('#facc15');
+      }
+    } else {
+      this.subtitleText?.setText(
+        isTouch
+          ? 'Tap any fighter to battle!'
+          : 'Click any fighter (or WASD / Arrows + Enter) to fight!'
+      ).setColor('#94a3b8');
+    }
+
+    this.filterTabs.forEach((tab) => {
+      const opt = FILTER_OPTIONS.find((o) => o.id === tab.id);
+      if (!opt) {
+        return;
+      }
+      const count =
+        opt.id === 'All'
+          ? this.allRoster.length
+          : this.allRoster.filter((c) => getSpecialMoveSpec(c.id).universe === opt.id).length;
+      tab.text.setText(isTouch ? `${opt.label} (${count})` : `[${opt.hotkey}] ${opt.label} (${count})`);
+    });
+
+    if (this.footerHintText) {
+      if (isTouch) {
+        this.footerHintText.setText(
+          this.mode === '1vcpu'
+            ? 'Tap tabs to filter  •  Tap Bot or Stage above  •  Tap any fighter to fight'
+            : 'Tap tabs to filter  •  P1 picks first, then P2 picks'
+        );
+      } else {
+        this.footerHintText.setText(
+          this.mode === '1vcpu'
+            ? '1-4 / Q: Filter  •  B: Bot Level  •  Tab: Stage  •  Esc: Menu'
+            : '1-4 / Q: Filter  •  Tab: Stage  •  Esc: Menu'
+        );
+      }
+    }
+  }
+
   private cycleBotDifficulty(): void {
     if (this.transitioning || this.mode !== '1vcpu') {
       return;
@@ -313,7 +417,7 @@ export class CharacterSelectScene extends BaseScene {
     const idx = BOT_DIFFICULTIES.indexOf(this.botDifficulty);
     this.botDifficulty = BOT_DIFFICULTIES[(idx + 1) % BOT_DIFFICULTIES.length];
     this.app.settingsStore.patchState({ botDifficulty: this.botDifficulty });
-    this.botButtonText?.setText(`Bot: ${this.botDifficulty.toUpperCase()} [B]`);
+    this.syncAdaptiveLabels();
     playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
   }
 
@@ -324,25 +428,20 @@ export class CharacterSelectScene extends BaseScene {
     const idx = STAGE_DEFINITIONS.findIndex((s) => s.id === this.stageId);
     const next = STAGE_DEFINITIONS[(idx + 1) % STAGE_DEFINITIONS.length];
     this.stageId = next.id;
-    this.stageButtonText.setText(`Stage: ${next.label} [Tab]`);
+    this.syncAdaptiveLabels();
     playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
   }
 
   private buildFilterTabs(): void {
     const { centerX } = this.cameras.main;
-    const tabW = 148;
-    const tabH = 26;
+    const tabW = 154;
+    const tabH = 34;
     const gap = 10;
     const totalW = FILTER_OPTIONS.length * tabW + (FILTER_OPTIONS.length - 1) * gap;
     const startX = centerX - totalW / 2 + tabW / 2;
-    const y = 76;
+    const y = 80;
 
     FILTER_OPTIONS.forEach((opt, idx) => {
-      const count =
-        opt.id === 'All'
-          ? this.allRoster.length
-          : this.allRoster.filter((c) => getSpecialMoveSpec(c.id).universe === opt.id).length;
-
       const x = startX + idx * (tabW + gap);
       const bg = this.add
         .rectangle(x, y, tabW, tabH, 0x0f172a, 0.94)
@@ -355,10 +454,10 @@ export class CharacterSelectScene extends BaseScene {
         .setDepth(26);
 
       const text = this.add
-        .text(x, y - 1, `[${opt.hotkey}] ${opt.label} (${count})`, {
+        .text(x, y - 1, opt.label, {
           color: '#cbd5e1',
           fontFamily: 'monospace',
-          fontSize: '11px',
+          fontSize: '12px',
           fontStyle: 'bold'
         })
         .setOrigin(0.5)
@@ -451,8 +550,8 @@ export class CharacterSelectScene extends BaseScene {
       Math.min(cols, this.roster.length) * cardWidth + (Math.min(cols, this.roster.length) - 1) * gapX;
     const gridH = rows * cardHeight + Math.max(0, rows - 1) * gapY;
 
-    const areaTop = 100;
-    const areaBottom = 530;
+    const areaTop = 104;
+    const areaBottom = 532;
     const startX = centerX - gridW / 2 + cardWidth / 2;
     const startY = areaTop + Math.max(0, (areaBottom - areaTop - gridH) / 2) + cardHeight / 2;
 
@@ -867,12 +966,18 @@ export class CharacterSelectScene extends BaseScene {
       return;
     }
 
-    if (!this.p1.locked && index !== this.p2.index) {
+    if (!this.p1.locked) {
+      if (index === this.p2.index && !this.p2.locked && this.roster.length > 1) {
+        const nextIdx = Phaser.Math.Wrap(index + 1, 0, this.roster.length);
+        this.p2.index = nextIdx;
+        this.p2.characterId = this.roster[nextIdx].id;
+        this.refreshCursor(this.p2);
+      }
       this.p1.index = index;
       this.p1.characterId = char.id;
       this.refreshCursor(this.p1);
       this.confirmPlayer(this.p1);
-    } else if (this.p1.locked && !this.p2.locked && index !== this.p1.index) {
+    } else if (!this.p2.locked && index !== this.p1.index) {
       this.p2.index = index;
       this.p2.characterId = char.id;
       this.refreshCursor(this.p2);
@@ -891,10 +996,14 @@ export class CharacterSelectScene extends BaseScene {
 
     cursor.locked = true;
     this.refreshCursor(cursor);
+    this.syncAdaptiveLabels();
     playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
 
     const card = this.cards[cursor.index];
     const onDone = (): void => {
+      if (!this.scene.isActive()) {
+        return;
+      }
       if (this.mode === '1vcpu') {
         this.runCpuSelection();
         return;
@@ -934,6 +1043,9 @@ export class CharacterSelectScene extends BaseScene {
       this.refreshCursor(this.p2);
 
       this.time.delayedCall(420, () => {
+        if (!this.scene.isActive()) {
+          return;
+        }
         playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
         const cpuCard = this.cards[rosterIdx];
         if (cpuCard) {
@@ -946,13 +1058,16 @@ export class CharacterSelectScene extends BaseScene {
     }
 
     this.time.delayedCall(420, () => {
+      if (!this.scene.isActive()) {
+        return;
+      }
       playAudioCue(this, AUDIO_KEYS.uiConfirm, this.app.settingsStore.getState());
       this.startMatch();
     });
   }
 
   private startMatch(): void {
-    if (this.transitioning && this.mode === '1v1') {
+    if (!this.scene.isActive() || (this.transitioning && this.mode === '1v1')) {
       return;
     }
 

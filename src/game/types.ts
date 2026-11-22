@@ -26,6 +26,8 @@ export type MatchMode = '1v1' | '1vcpu';
 
 export type BotDifficulty = 'easy' | 'normal' | 'hard' | 'nightmare';
 
+export type ControlScheme = 'auto' | 'touch' | 'keyboard';
+
 /**
  * The accumulated selections produced by the Play flow (mode -> level ->
  * characters) and consumed by {@link SCENE_KEYS.Match}.
@@ -64,6 +66,7 @@ export interface GameSettings {
   musicVolume: number;
   muted: boolean;
   botDifficulty: BotDifficulty;
+  controlScheme: ControlScheme;
 }
 
 export interface InputSnapshot {

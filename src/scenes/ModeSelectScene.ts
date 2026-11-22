@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 
 import { AUDIO_KEYS, playAudioCue } from '../game/core/audio';
+import { startIntroMusic } from '../game/core/introMusic';
 import { createSelectionCard, type SelectionCard } from '../game/ui';
 import { SCENE_KEYS, type BotDifficulty, type MatchMode } from '../game/types';
 import { BaseScene } from './BaseScene';
@@ -43,6 +44,7 @@ export class ModeSelectScene extends BaseScene {
   private selectedIndex = 0;
   private subtitleText?: Phaser.GameObjects.Text;
   private stepBackBtn?: Phaser.GameObjects.Text;
+  private footerHint?: Phaser.GameObjects.Text;
 
   constructor() {
     super(SCENE_KEYS.ModeSelect);
@@ -54,6 +56,7 @@ export class ModeSelectScene extends BaseScene {
     this.selectedIndex = 0;
 
     this.markActiveScene(SCENE_KEYS.ModeSelect);
+    startIntroMusic(this.app.settingsStore.getState());
     this.cameras.main.setBackgroundColor(0x020617);
     this.createHeading('Select Mode', '');
     this.createMenuButton(24, 30);
@@ -74,7 +77,7 @@ export class ModeSelectScene extends BaseScene {
         fontSize: '14px',
         fontStyle: 'bold',
         backgroundColor: 'rgba(15, 23, 42, 0.92)',
-        padding: { x: 14, y: 8 },
+        padding: { x: 16, y: 12 },
         stroke: '#334155',
         strokeThickness: 2
       })
@@ -87,14 +90,28 @@ export class ModeSelectScene extends BaseScene {
     this.stepBackBtn.on('pointerout', () => this.stepBackBtn?.setColor('#e2e8f0'));
     this.stepBackBtn.on('pointerdown', () => this.showModeStep());
 
+    this.footerHint = this.createFooterHint('');
     this.showModeStep();
     this.registerInput();
-
-    this.createFooterHint('← → / A D / Tap to choose • Enter / Space to confirm • Esc Menu');
+    this.syncInputLabels(this.getEffectiveInputMode());
+    this.subscribeEffectiveInputMode((mode) => {
+      this.syncInputLabels(mode);
+      if (this.step === 'mode') {
+        this.showModeStep(true);
+      }
+    });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.clearCards();
     });
+  }
+
+  private syncInputLabels(mode: 'touch' | 'keyboard'): void {
+    this.footerHint?.setText(
+      mode === 'touch'
+        ? 'Tap a card to select'
+        : '← → / A D / Tap to choose • Enter / Space to confirm • Esc Menu'
+    );
   }
 
   private clearCards(): void {
@@ -102,7 +119,10 @@ export class ModeSelectScene extends BaseScene {
     this.cards = [];
   }
 
-  private showModeStep(): void {
+  private showModeStep(preserveSelection = false): void {
+    const nextSelectedIndex = preserveSelection
+      ? Math.max(0, Math.min(this.selectedIndex, MODE_OPTIONS.length - 1))
+      : 0;
     this.step = 'mode';
     this.clearCards();
     this.subtitleText?.setText('How do you want to play?');
@@ -115,14 +135,21 @@ export class ModeSelectScene extends BaseScene {
     const totalWidth = cardWidth * MODE_OPTIONS.length + gap * (MODE_OPTIONS.length - 1);
     const startX = centerX - totalWidth / 2 + cardWidth / 2;
 
+    const inputMode = this.getEffectiveInputMode();
     MODE_OPTIONS.forEach((option, index) => {
+      const dynamicSubtitle =
+        option.mode === '1v1'
+          ? inputMode === 'touch'
+            ? 'Two players • Dual touch pads'
+            : 'Two players • One keyboard'
+          : option.subtitle;
       const card = createSelectionCard(this, {
         x: startX + index * (cardWidth + gap),
         y: centerY + 6,
         width: cardWidth,
         height: cardHeight,
         title: option.title,
-        subtitle: option.subtitle,
+        subtitle: dynamicSubtitle,
         texture: option.texture,
         imageMaxSize: 162,
         imageOffsetY: -46,
@@ -133,7 +160,7 @@ export class ModeSelectScene extends BaseScene {
       this.cards.push(card);
     });
 
-    this.setSelection(0);
+    this.setSelection(nextSelectedIndex);
   }
 
   private showDifficultyStep(): void {

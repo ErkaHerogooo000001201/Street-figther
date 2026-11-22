@@ -16,6 +16,7 @@ export class BootScene extends BaseScene {
   }
 
   preload(): void {
+    this.markActiveScene(SCENE_KEYS.Boot);
     const { centerX, centerY } = this.cameras.main;
     this.cameras.main.setBackgroundColor(0x020617);
 
